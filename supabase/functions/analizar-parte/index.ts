@@ -196,7 +196,7 @@ Omite los campos que no encuentres (no inventes). Los totales ya se recalculan s
     let aiWarning: string | null = null;
 
     // Modelos a probar en orden. Si el primero da 503/overload, caemos al lite.
-    const modelChain = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+    const modelChain = ["gemini-1.5-flash", "gemini-1.5-flash-8b"];
     const RETRYABLE = new Set([429, 500, 502, 503, 504]);
     let lastStatus = 0;
     let lastBody = "";
