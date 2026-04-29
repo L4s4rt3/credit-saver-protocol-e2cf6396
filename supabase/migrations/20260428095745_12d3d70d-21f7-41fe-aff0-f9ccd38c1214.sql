@@ -1,0 +1,1 @@
+ALTER TYPE parte_estado ADD VALUE IF NOT EXISTS 'Analizado' BEFORE 'Validado';
