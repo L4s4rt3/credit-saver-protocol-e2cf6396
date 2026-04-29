@@ -125,17 +125,25 @@ export default function PartDetail() {
   }
 
   async function save() {
-    if (!parte) return;
+    if (!parte || !cascade) return;
     setSaving(true);
     const payload: any = {
       notas_generales: parte.notas_generales,
       notas_inventario: parte.notas_inventario,
     };
     MANUAL_FIELDS.forEach((f) => (payload[f.key] = Number(parte[f.key] || 0)));
+
+    // Auto-estado según |%DSJ|: <1% Validado · 1-3% Analizado · >3% Con descuadre
+    if (parte.estado !== "Borrador") {
+      const abs = Math.abs(cascade.dsj_pct);
+      payload.estado = abs > 3 ? "Con descuadre" : abs >= 1 ? "Analizado" : "Validado";
+    }
+
     const { error } = await supabase.from("partes_diarios").update(payload).eq("id", parte.id);
     setSaving(false);
     if (error) return toast({ title: "Error", description: error.message, variant: "destructive" });
     toast({ title: "Guardado" });
+    if (payload.estado && payload.estado !== parte.estado) load();
   }
 
   async function toggleEstado() {
