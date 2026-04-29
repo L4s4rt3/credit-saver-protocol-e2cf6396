@@ -148,9 +148,13 @@ export default function PartDetail() {
 
   async function toggleEstado() {
     if (!parte || !cascade) return;
-    const next = parte.estado === "Borrador"
-      ? (cascade.semaforo === "rojo" ? "Con descuadre" : "Validado")
-      : "Borrador";
+    let next: string;
+    if (parte.estado === "Borrador") {
+      const abs = Math.abs(cascade.dsj_pct);
+      next = abs > 3 ? "Con descuadre" : abs >= 1 ? "Analizado" : "Validado";
+    } else {
+      next = "Borrador";
+    }
     const { error } = await supabase.from("partes_diarios").update({ estado: next }).eq("id", parte.id);
     if (error) return toast({ title: "Error", description: error.message, variant: "destructive" });
     toast({ title: next === "Borrador" ? "Parte reabierto" : `Parte ${next.toLowerCase()}` });

@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { KPICard } from "@/components/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer,
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { computeCascade } from "@/lib/cascade";
 import { formatKg, formatPct, formatDate } from "@/lib/format";
@@ -78,6 +81,27 @@ export default function Dashboard() {
     return { produccion_real, palets, mermas, dsj, dsj_pct };
   }, [partes]);
 
+  const dsjChart = useMemo(() => {
+    return [...partes]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-30)
+      .map((p) => {
+        const r = computeCascade({
+          kg_produccion_calibrador: Number(p.kg_produccion_calibrador),
+          kg_mujeres_calibrador: Number(p.kg_mujeres_calibrador),
+          kg_palets_brutos: Number(p.kg_palets_brutos),
+          kg_podrido_calibrador: Number(p.kg_podrido_calibrador_auto),
+          kg_industria_manual: Number(p.kg_industria_manual),
+          kg_reciclado_malla_z1: Number(p.kg_reciclado_malla_z1),
+          kg_reciclado_malla_z2: Number(p.kg_reciclado_malla_z2),
+          kg_inventario_sin_alta: Number(p.kg_inventario_sin_alta),
+          kg_podrido_bolsa_basura: Number(p.kg_podrido_bolsa_basura),
+          kg_inventario_anterior_sin_alta: Number(p.kg_inventario_anterior_sin_alta),
+        });
+        return { date: p.date, label: p.date.slice(5), dsj_pct: Number(r.dsj_pct.toFixed(2)) };
+      });
+  }, [partes]);
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
       <header className="flex items-center justify-between flex-wrap gap-3">
@@ -113,6 +137,41 @@ export default function Dashboard() {
           </>
         )}
       </section>
+
+      <Card>
+        <CardHeader><CardTitle className="text-lg">% DJPMN · últimos 30 partes</CardTitle></CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-64" />
+          ) : dsjChart.length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">{t("no_data")}</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={dsjChart} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="label" fontSize={11} />
+                <YAxis fontSize={11} tickFormatter={(v) => `${v}%`} />
+                <Tooltip
+                  contentStyle={{
+                    background: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "var(--radius)",
+                    fontSize: 12,
+                  }}
+                  labelFormatter={(_, p) => (p?.[0]?.payload?.date ? formatDate(p[0].payload.date) : "")}
+                  formatter={(v: number) => [`${v}%`, "DJPMN"]}
+                />
+                <ReferenceLine y={3} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
+                <ReferenceLine y={-3} stroke="hsl(var(--destructive))" strokeDasharray="4 4" />
+                <ReferenceLine y={1} stroke="hsl(var(--warning))" strokeDasharray="4 4" />
+                <ReferenceLine y={-1} stroke="hsl(var(--warning))" strokeDasharray="4 4" />
+                <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
+                <Line type="monotone" dataKey="dsj_pct" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
