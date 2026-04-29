@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
 
     let aiData: any = {};
     let aiWarning: string | null = null;
-    const modelChain = ["openrouter/free"];
+    const modelChain = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free"];
     const RETRYABLE = new Set([429, 500, 502, 503, 504]);
     let lastStatus = 0;
     let lastBody = "";
