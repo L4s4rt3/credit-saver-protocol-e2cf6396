@@ -148,9 +148,15 @@ Deno.serve(async (req) => {
     const textParts: string[] = [hint];
     for (const c of fileContexts) {
       if (c.csv) {
-        textParts.push("\n--- [" + c.kind + "] " + c.f.file_name + " ---\n" + c.csv);
+        // Solo enviar los primeros 8000 chars por archivo para no sobrecargar
+        const csvTruncated = c.csv.slice(0, 8000);
+        textParts.push("\n--- [" + c.kind + "] " + c.f.file_name + " ---\n" + csvTruncated);
       }
+      // No enviar imágenes a OpenRouter - los lotes se ignoran en free tier
     }
+    // Limitar total a 40000 chars
+    const fullText = textParts.join("\n");
+    const finalText = fullText.slice(0, 40000);
 
     const hasBinaryAiInputs = fileContexts.some((c) => c.bytes && (c.mime.startsWith("image/") || c.mime === "application/pdf"));
     const perAttemptTimeoutMs = hasBinaryAiInputs ? 25_000 : 12_000;
@@ -179,7 +185,7 @@ Deno.serve(async (req) => {
               signal: controller.signal,
               body: JSON.stringify({
                 model: model,
-                messages: [{ role: "user", content: textParts.join("\n") }],
+                messages: [{ role: "user", content: finalText }],
                 response_format: { type: "json_object" },
                 temperature: 0.1,
               }),
