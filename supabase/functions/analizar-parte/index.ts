@@ -209,7 +209,7 @@ Omite los campos que no encuentres (no inventes). Los totales ya se recalculan s
         const timeout = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
         try {
           const aiResp = await fetch(
-            `https://openrouter.ai/api/v1/chat/completions',
+            "https://openrouter.ai/api/v1/chat/completions",
             {
               method: "POST",
               headers: {
