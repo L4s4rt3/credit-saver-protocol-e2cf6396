@@ -1,6 +1,6 @@
 // Edge function: analizar-parte
 // Implementa el spec §11: extracción determinista server-side de XLSX +
-// llamada directa a Gemini para imágenes/contexto, escritura idempotente en
+// llamada directa a OpenRouter para imágenes/contexto, escritura idempotente en
 // production_runs / gstock_entries / lotes_dia, y auto-fill del inventario anterior.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 8-9. Construir prompt Gemini
+    // 8-9. Construir prompt OpenRouter
     const hint = `Eres analista de una empresa citrícola. Extrae datos del parte diario en kg.
 Archivos clasificados:
 ${fileContexts.map((c) => `- [${c.kind}] ${c.f.file_name}`).join("\n")}
