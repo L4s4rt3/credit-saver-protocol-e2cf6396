@@ -214,7 +214,7 @@ Omite los campos que no encuentres (no inventes). Los totales ya se recalculan s
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+                "Authorization": "Bearer " + OPENROUTER_API_KEY,
               },
 
               signal: controller.signal,
