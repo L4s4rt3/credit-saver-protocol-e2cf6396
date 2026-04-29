@@ -36,8 +36,8 @@ Deno.serve(async (req) => {
     const SUPABASE_ANON_KEY =
       Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) return json({ error: "GEMINI_API_KEY no configurada" }, 500);
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) return json({ error: "OPENROUTER_API_KEY no configurada" }, 500);
 
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
@@ -196,7 +196,7 @@ Omite los campos que no encuentres (no inventes). Los totales ya se recalculan s
     let aiWarning: string | null = null;
 
     // Modelos a probar en orden. Si el primero da 503/overload, caemos al lite.
-    const modelChain = ["gemini-2.0-flash", "gemini-1.5-flash"];
+    const modelChain = ["meta-llama/llama-3.3-70b-instruct:free", "mistralai/mistral-7b-instruct:free"];
     const RETRYABLE = new Set([429, 500, 502, 503, 504]);
     let lastStatus = 0;
     let lastBody = "";
@@ -209,19 +209,27 @@ Omite los campos que no encuentres (no inventes). Los totales ya se recalculan s
         const timeout = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
         try {
           const aiResp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+            `https://openrouter.ai/api/v1/chat/completions,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+              },
+
               signal: controller.signal,
-              body,
+              body: JSON.stringify({
+                model,
+                messages: [{ role: "user", content: parts.map((p: any) => p.text ?? "").join("\n") }],
+                response_format: { type: "json_object" },
+              }),
             },
           );
           clearTimeout(timeout);
 
           if (aiResp.ok) {
             const aiJson = await aiResp.json();
-            const text = aiJson?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+            const text = aiJson?.choices?.[0]?.message?.content ?? "{}";
             try {
               aiData = JSON.parse(text);
               succeeded = true;
