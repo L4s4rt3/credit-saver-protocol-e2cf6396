@@ -148,7 +148,7 @@ export default function PartDetail() {
 
   async function toggleEstado() {
     if (!parte || !cascade) return;
-    let next: string;
+    let next: "Borrador" | "Analizado" | "Con descuadre" | "Validado";
     if (parte.estado === "Borrador") {
       const abs = Math.abs(cascade.dsj_pct);
       next = abs > 3 ? "Con descuadre" : abs >= 1 ? "Analizado" : "Validado";
