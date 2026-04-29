@@ -387,27 +387,22 @@ function extractNetos(rows: any[][]): number {
 function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
   let mujeres = 0;
   let podrido = 0;
-  let inMujeresSection = false;
+  let mujeresHeaderRow = -1;
   let pesoCol = -1;
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] ?? [];
 
-    // Detectar si entramos en sección MUJERES
-    const rowStr = r.map((c) => norm(String(c ?? ""))).join("|");
-    if (rowStr.includes("mujeres")) {
-      inMujeresSection = true;
+    // Detectar encabezado de sección MUJERES
+    const rowVals = r.map((c) => norm(String(c ?? "")));
+    if (rowVals.some((v) => v === "mujeres")) {
+      mujeresHeaderRow = i;
       pesoCol = -1;
       continue;
     }
 
-    // Detectar si salimos de la sección (nueva sección)
-    if (inMujeresSection && rowStr.includes("grupo de clasificacion")) {
-      inMujeresSection = false;
-    }
-
-    // Detectar cabecera de columnas dentro de la sección MUJERES
-    if (inMujeresSection && pesoCol === -1) {
+    // Dentro de la sección MUJERES, buscar cabecera de columnas
+    if (mujeresHeaderRow >= 0 && pesoCol === -1) {
       for (let j = 0; j < r.length; j++) {
         const cell = norm(String(r[j] ?? ""));
         if (cell === "peso (kg)" || cell === "peso(kg)" || cell === "peso kg") {
@@ -418,22 +413,21 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       continue;
     }
 
-    // Sumar filas de datos de la sección MUJERES
-    if (inMujeresSection && pesoCol >= 0) {
-      const isTotalRow = r.some((c) => /\btotal/i.test(String(c ?? "")));
-      if (isTotalRow) continue;
-      const kg = toNum(r[pesoCol]);
-      if (kg > 0) mujeres += kg;
+    // Fila de subtotal de la sección MUJERES: primera celda vacía string + números
+    if (mujeresHeaderRow >= 0 && pesoCol >= 0) {
+      const firstVal = String(r[0] ?? "").trim();
+      if (firstVal === "" && typeof r[pesoCol] === "number" && r[pesoCol] > 0) {
+        mujeres = toNum(r[pesoCol]);
+        mujeresHeaderRow = -1; // ya lo encontramos
+        pesoCol = -1;
+      }
     }
 
-    // Buscar fila PODRIDO en cualquier sección
-    const firstVal = norm(String(r[0] ?? ""));
-    if (firstVal === "podrido" || firstVal.includes("podrido")) {
-      const peso = findCol([r], [(s) => s === "peso (kg)" || s === "peso(kg)" || s === "peso kg"]);
-      if (peso) {
-        const kg = toNum(r[peso.colIdx]);
-        if (kg > 0) podrido += kg;
-      }
+    // Buscar PODRIDO en cualquier parte
+    const firstCell = norm(String(r[0] ?? ""));
+    if (firstCell.includes("podrido") && pesoCol >= 0) {
+      const kg = toNum(r[pesoCol]);
+      if (kg > 0) podrido = kg;
     }
   }
 
