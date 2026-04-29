@@ -398,21 +398,23 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] ?? [];
-
-    // Detectar sección MUJERES (fila con "MUJERES" en alguna celda)
     const rowVals = r.map((c: any) => norm(String(c ?? "")));
+
+    // Detectar sección MUJERES
     if (rowVals.some((v: string) => v === "mujeres")) {
       inMujeresSection = true;
       pesoCol = -1;
       continue;
     }
 
-    // Salir de sección si encontramos otra sección
-    if (inMujeresSection && rowVals.some((v: string) => v === "exportacion" || v === "no exportacion" || v === "no comercial")) {
+    // Salir si empieza otra sección principal
+    if (inMujeresSection && rowVals.some((v: string) =>
+      v === "exportacion" || v === "no exportacion" || v === "no comercial"
+    )) {
       inMujeresSection = false;
     }
 
-    // Buscar cabecera de columnas dentro de la sección MUJERES
+    // Buscar cabecera "Peso (kg)" dentro de la sección
     if (inMujeresSection && pesoCol === -1) {
       for (let j = 0; j < r.length; j++) {
         const cell = norm(String(r[j] ?? ""));
@@ -424,11 +426,11 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       continue;
     }
 
-    // Fila subtotal MUJERES: r[0] es null/undefined Y hay un número en pesoCol
+    // Fila subtotal: todas las celdas antes de pesoCol son null/"" Y pesoCol tiene número grande
     if (inMujeresSection && pesoCol >= 0) {
-      const firstIsEmpty = r[0] == null || String(r[0]).trim() === "";
       const pesoVal = toNum(r[pesoCol]);
-      if (firstIsEmpty && pesoVal > 0) {
+      const allEmptyBefore = r.slice(0, pesoCol).every((c: any) => c == null || String(c).trim() === "");
+      if (allEmptyBefore && pesoVal > 100) {
         mujeres = pesoVal;
         inMujeresSection = false;
         pesoCol = -1;
@@ -436,13 +438,10 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       }
     }
 
-    // Buscar PODRIDO en cualquier parte del archivo
-    const firstCell = norm(String(r[0] ?? ""));
-    if (firstCell === "podrido" || (firstCell === "" && r.some((c: any) => norm(String(c ?? "")) === "podrido"))) {
-      if (pesoCol >= 0) {
-        const kg = toNum(r[pesoCol]);
-        if (kg > 0) podrido = kg;
-      }
+    // Buscar PODRIDO
+    if (rowVals.some((v: string) => v === "podrido") && pesoCol >= 0) {
+      const kg = toNum(r[pesoCol]);
+      if (kg > 0) podrido = kg;
     }
   }
 
