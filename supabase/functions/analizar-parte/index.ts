@@ -201,10 +201,10 @@ Deno.serve(async (req) => {
 
           lastStatus = aiResp.status;
           lastBody = await aiResp.text();
-          console.warn("OpenRouter " + model + " intento " + (attempt + 1) + " -> " + aiResp.status);
+          console.warn("Nvidia " + model + " intento " + (attempt + 1) + " -> " + aiResp.status);
 
-          if (aiResp.status === 403) { aiWarning = "OpenRouter rechazo la clave"; break outer; }
-          if (!RETRYABLE.has(aiResp.status)) { aiWarning = "OpenRouter devolvio " + aiResp.status; break; }
+          if (aiResp.status === 403) { aiWarning = "Nvidia rechazo la clave"; break outer; }
+          if (!RETRYABLE.has(aiResp.status)) { aiWarning = "Nvidia devolvio " + aiResp.status; break; }
           const delay = 500 * Math.pow(2, attempt) + Math.floor(Math.random() * 300);
           await new Promise((r) => setTimeout(r, delay));
         } catch (e) {
@@ -222,8 +222,8 @@ Deno.serve(async (req) => {
       if (lastStatus === 429) aiWarning = "Limite IA superado";
       else if (lastStatus === 503) aiWarning = "IA saturada, reintenta en unos minutos";
       else if (lastStatus === 0) aiWarning = "Timeout al consultar IA";
-      else aiWarning = "OpenRouter devolvio " + lastStatus;
-      console.error("OpenRouter exhausted retries", lastStatus, lastBody.slice(0, 500));
+      else aiWarning = "Nvidia devolvio " + lastStatus;
+      console.error("Nvidia exhausted retries", lastStatus, lastBody.slice(0, 500));
     }
 
     const mapping: Record<string, string> = {
