@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
         const timeout = setTimeout(() => controller.abort(), 12000);
         try {
           const aiResp = await fetch(
-            "https://openrouter.ai/api/v1/chat/completions",
+            "https://integrate.api.nvidia.com/v1/chat/completions",
             {
               method: "POST",
               headers: {
