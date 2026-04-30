@@ -2,8 +2,8 @@
  * Modelo DSJ — Cascada de producción citrícola Lasarte SAT.
  *
  * Producción real = Calibrador + Industria manual − Mujeres(L) − Reciclado Z1 − Reciclado Z2
- * Palets ajustados = Palets brutos − Inventario día anterior sin alta
- * Diferencia bruta = Producción real − Palets ajustados − Inventario final sin alta
+ * Palets ajustados = Palets brutos − Inventario día anterior sin alta − Inventario final sin alta
+ * Diferencia bruta = Producción real − Palets ajustados
  * Mermas totales = Podrido calibrador + Podrido manual (bolsa basura)
  * DSJ = Diferencia bruta − Mermas totales   (diferencia justificada por podrido y merma natural)
  * % DSJ = DSJ / Producción real
@@ -63,10 +63,10 @@ export function computeCascade(input: CascadeInput): CascadeResult {
 
   const palets_brutos = n(input.kg_palets_brutos);
   const inventario_anterior = n(input.kg_inventario_anterior_sin_alta);
-  const palets_ajustados = palets_brutos - inventario_anterior;
-
   const inventario_final = n(input.kg_inventario_sin_alta);
-  const diferencia_bruta = produccion_real - palets_ajustados - inventario_final;
+  const palets_ajustados = palets_brutos - inventario_anterior - inventario_final;
+
+  const diferencia_bruta = produccion_real - palets_ajustados;
 
   const podrido_calibrador = n(input.kg_podrido_calibrador);
   const podrido_manual = n(input.kg_podrido_bolsa_basura);
