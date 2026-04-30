@@ -307,8 +307,8 @@ function json(body: unknown, status = 200) {
 }
 
 function repairXlsx(bytes: Uint8Array): Uint8Array {
-  for (let i = 0; i < Math.min(bytes.length - 4, 4096); i++) {
-    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x03 && bytes[i + 3] === 0x04) {
+  for (let i = 0; i < Math.min(bytes.length - 4, 65536); i++) {
+    if (bytes[i] === 0x50 && bytes[i+1] === 0x4b && bytes[i+2] === 0x03 && bytes[i+3] === 0x04) {
       return i === 0 ? bytes : bytes.slice(i);
     }
   }
