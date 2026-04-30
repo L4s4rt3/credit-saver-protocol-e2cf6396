@@ -84,82 +84,72 @@ Deno.serve(async (req) => {
     };
 
     const server: Record<string, number> = {};
-    const fileContexts: { f: ArchivoRow; kind: string; csv?: string; bytes?: Uint8Array; mime: string }[] = [];
+    const csvContexts: { name: string; kind: string; csv: string }[] = [];
 
+    // Solo procesar archivos XLSX — ignorar imágenes completamente
     for (const f of files) {
       if (!f.file_path) continue;
-      const { data: blob, error: dlErr } = await admin.storage
-        .from("partes-archivos")
-        .download(f.file_path);
-      if (dlErr || !blob) { console.warn("dl fail", f.file_path, dlErr?.message); continue; }
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      const mime = f.mime_type ?? blob.type ?? "application/octet-stream";
-      const kind = classify(f);
+      const mime = f.mime_type ?? "";
       const isXlsx =
         /\.xlsx?$/i.test(f.file_name ?? "") ||
         mime.includes("spreadsheet") ||
         mime === "application/vnd.ms-excel";
 
-      if (isXlsx) {
-        try {
-          const repaired = repairXlsx(bytes);
-          const wb = XLSX.read(repaired, { type: "array" });
-          const rowsAll: any[][] = [];
-          for (const sn of wb.SheetNames) {
-            const ws = wb.Sheets[sn];
-            const r = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, blankrows: false, defval: null });
-            rowsAll.push(...r);
-          }
-          if (kind === "gstock" || kind === "palets") {
-            const v = extractNetos(rowsAll);
-            if (v > 0 && (kind === "gstock" || !server.kg_palets_brutos)) server.kg_palets_brutos = v;
-          } else if (kind === "tamanos") {
-            const { mujeres, podrido } = extractTamanos(rowsAll);
-            if (mujeres > 0) server.kg_mujeres_calibrador = mujeres;
-            if (podrido > 0) server.kg_podrido_calibrador_auto = podrido;
-          } else if (kind === "produccion") {
-            const v = extractProduccionTotal(rowsAll);
-            if (v > 0) server.kg_produccion_calibrador = v;
-          }
-          const csv = rowsAll
-            .map((r) => r.map((c) => (c == null ? "" : String(c))).join(","))
-            .join("\n")
-            .slice(0, 120_000);
-          fileContexts.push({ f, kind, csv, mime });
-        } catch (e) {
-          console.warn("xlsx parse fail", f.file_name, e);
-          fileContexts.push({ f, kind, bytes, mime });
+      // Ignorar imágenes y PDFs — no descargar ni procesar
+      if (!isXlsx) {
+        console.log("Ignorando archivo no-XLSX:", f.file_name);
+        continue;
+      }
+
+      const { data: blob, error: dlErr } = await admin.storage
+        .from("partes-archivos")
+        .download(f.file_path);
+      if (dlErr || !blob) { console.warn("dl fail", f.file_path, dlErr?.message); continue; }
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const kind = classify(f);
+
+      try {
+        const repaired = repairXlsx(bytes);
+        const wb = XLSX.read(repaired, { type: "array" });
+        const rowsAll: any[][] = [];
+        for (const sn of wb.SheetNames) {
+          const ws = wb.Sheets[sn];
+          const r = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, blankrows: false, defval: null });
+          rowsAll.push(...r);
         }
-      } else {
-        fileContexts.push({ f, kind, bytes, mime });
+
+        if (kind === "gstock" || kind === "palets") {
+          const v = extractNetos(rowsAll);
+          if (v > 0 && (kind === "gstock" || !server.kg_palets_brutos)) server.kg_palets_brutos = v;
+        } else if (kind === "tamanos") {
+          const { mujeres, podrido } = extractTamanos(rowsAll);
+          if (mujeres > 0) server.kg_mujeres_calibrador = mujeres;
+          if (podrido > 0) server.kg_podrido_calibrador_auto = podrido;
+        } else if (kind === "produccion") {
+          const v = extractProduccionTotal(rowsAll);
+          if (v > 0) server.kg_produccion_calibrador = v;
+        }
+
+        const csv = rowsAll
+          .map((r) => r.map((c) => (c == null ? "" : String(c))).join(","))
+          .join("\n")
+          .slice(0, 6000);
+        csvContexts.push({ name: f.file_name ?? "", kind, csv });
+      } catch (e) {
+        console.warn("xlsx parse fail", f.file_name, e);
       }
     }
 
-    const hint = "Eres analista de una empresa citricola. Extrae datos del parte diario en kg.\nArchivos clasificados:\n" +
-      fileContexts.map((c) => "- [" + c.kind + "] " + c.f.file_name).join("\n") +
-      "\n\nDevuelve JSON estricto con esta forma exacta:\n" +
-      '{\n  "kg_produccion_total": number,\n  "kg_mujeres_l": number,\n  "kg_podrido_calibrador": number,\n  "kg_palets_alta": number,\n' +
-      '  "produccion": [{"product":"string","size_range":"string","kg_produced":number}],\n' +
-      '  "gstock": [{"product":"string","size_range":"string","kg_expected":number}],\n' +
-      '  "lotes": [{"producto":"string","lote_codigo":"string","notas":"string"}],\n' +
-      '  "notas": "string"\n}\n' +
-      "Omite los campos que no encuentres (no inventes).";
+    // Construir prompt para IA (solo texto, sin imágenes)
+    const hint = "Eres analista de una empresa citricola. Extrae datos del parte diario en kg.\n" +
+      "Devuelve JSON con: kg_produccion_total, kg_mujeres_l, kg_podrido_calibrador, kg_palets_alta, notas.\n" +
+      "Solo devuelve JSON, sin texto adicional.";
 
     const textParts: string[] = [hint];
-    for (const c of fileContexts) {
-      if (c.csv) {
-        // Solo enviar los primeros 8000 chars por archivo para no sobrecargar
-        const csvTruncated = c.csv.slice(0, 8000);
-        textParts.push("\n--- [" + c.kind + "] " + c.f.file_name + " ---\n" + csvTruncated);
-      }
-      // No enviar imágenes a OpenRouter - los lotes se ignoran en free tier
+    for (const c of csvContexts) {
+      textParts.push("\n--- [" + c.kind + "] " + c.name + " ---\n" + c.csv);
     }
-    // Limitar total a 40000 chars
-    const fullText = textParts.join("\n");
-    const finalText = fullText.slice(0, 40000);
-
-    const hasBinaryAiInputs = fileContexts.some((c) => c.bytes && (c.mime.startsWith("image/") || c.mime === "application/pdf"));
-    const perAttemptTimeoutMs = hasBinaryAiInputs ? 25_000 : 12_000;
+    const finalText = textParts.join("\n").slice(0, 30000);
 
     let aiData: any = {};
     let aiWarning: string | null = null;
@@ -172,7 +162,7 @@ Deno.serve(async (req) => {
     outer: for (const model of modelChain) {
       for (let attempt = 0; attempt < 3; attempt++) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
+        const timeout = setTimeout(() => controller.abort(), 12000);
         try {
           const aiResp = await fetch(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -213,22 +203,15 @@ Deno.serve(async (req) => {
           lastBody = await aiResp.text();
           console.warn("OpenRouter " + model + " intento " + (attempt + 1) + " -> " + aiResp.status);
 
-          if (aiResp.status === 403) {
-            aiWarning = "OpenRouter rechazo la clave configurada";
-            break outer;
-          }
-          if (!RETRYABLE.has(aiResp.status)) {
-            aiWarning = "OpenRouter devolvio " + aiResp.status;
-            break;
-          }
+          if (aiResp.status === 403) { aiWarning = "OpenRouter rechazo la clave"; break outer; }
+          if (!RETRYABLE.has(aiResp.status)) { aiWarning = "OpenRouter devolvio " + aiResp.status; break; }
           const delay = 500 * Math.pow(2, attempt) + Math.floor(Math.random() * 300);
           await new Promise((r) => setTimeout(r, delay));
         } catch (e) {
           clearTimeout(timeout);
           const isAbort = e instanceof Error && e.name === "AbortError";
-          console.warn("OpenRouter " + model + " intento " + (attempt + 1) + " fallo:", e);
           lastStatus = 0;
-          lastBody = isAbort ? "timeout" : (e instanceof Error ? e.message : "error desconocido");
+          lastBody = isAbort ? "timeout" : (e instanceof Error ? e.message : "error");
           const delay = 500 * Math.pow(2, attempt) + Math.floor(Math.random() * 300);
           await new Promise((r) => setTimeout(r, delay));
         }
@@ -237,8 +220,8 @@ Deno.serve(async (req) => {
 
     if (!succeeded && !aiWarning) {
       if (lastStatus === 429) aiWarning = "Limite IA superado";
-      else if (lastStatus === 503) aiWarning = "IA saturada temporalmente, reintenta en unos minutos";
-      else if (lastStatus === 0) aiWarning = "Tiempo de espera agotado al consultar IA";
+      else if (lastStatus === 503) aiWarning = "IA saturada, reintenta en unos minutos";
+      else if (lastStatus === 0) aiWarning = "Timeout al consultar IA";
       else aiWarning = "OpenRouter devolvio " + lastStatus;
       console.error("OpenRouter exhausted retries", lastStatus, lastBody.slice(0, 500));
     }
@@ -331,15 +314,6 @@ function repairXlsx(bytes: Uint8Array): Uint8Array {
   return bytes;
 }
 
-function base64Encode(bytes: Uint8Array): string {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]);
-  }
-  return btoa(binary);
-}
-
 function toNum(v: any): number {
   if (v == null) return 0;
   if (typeof v === "number") return isFinite(v) ? v : 0;
@@ -414,7 +388,7 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       inMujeresSection = false;
     }
 
-    // Buscar cabecera "Peso (kg)" dentro de la sección
+    // Buscar cabecera "Peso (kg)" dentro de la sección MUJERES
     if (inMujeresSection && pesoCol === -1) {
       for (let j = 0; j < r.length; j++) {
         const cell = norm(String(r[j] ?? ""));
@@ -426,7 +400,7 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       continue;
     }
 
-    // Fila subtotal: todas las celdas antes de pesoCol son null/"" Y pesoCol tiene número grande
+    // Fila subtotal MUJERES: todas las celdas antes de pesoCol son null/"" Y pesoCol tiene número > 100
     if (inMujeresSection && pesoCol >= 0) {
       const pesoVal = toNum(r[pesoCol]);
       const allEmptyBefore = r.slice(0, pesoCol).every((c: any) => c == null || String(c).trim() === "");
@@ -438,7 +412,7 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       }
     }
 
-    // Buscar PODRIDO
+    // Buscar PODRIDO en cualquier parte
     if (rowVals.some((v: string) => v === "podrido") && pesoCol >= 0) {
       const kg = toNum(r[pesoCol]);
       if (kg > 0) podrido = kg;
