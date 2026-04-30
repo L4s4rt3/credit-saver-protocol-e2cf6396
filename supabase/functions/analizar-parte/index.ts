@@ -239,6 +239,7 @@ Deno.serve(async (req) => {
       if (typeof sv === "number" && sv > 0) update[dbKey] = sv;
       else if (isFinite(av) && av > 0) update[dbKey] = av;
     }
+    aiData = aiData ?? {};
     update.resumen_ia = { ...aiData, _server_side: server, _ai_warning: aiWarning };
     update.estado = "Analizado";
 
