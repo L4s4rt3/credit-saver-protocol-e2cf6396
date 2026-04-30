@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "Authorization": "Bearer " + OPENROUTER_API_KEY,
+                "Authorization": "Bearer " + NVIDIA_API_KEY,
               },
               signal: controller.signal,
               body: JSON.stringify({
