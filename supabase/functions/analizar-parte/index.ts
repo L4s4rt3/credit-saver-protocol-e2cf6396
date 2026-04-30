@@ -372,11 +372,24 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
   let pesoCol = -1;
   let sectionValues: number[] = [];
 
+  const finalizeMujeres = () => {
+    if (sectionValues.length > 1) {
+      const last = sectionValues[sectionValues.length - 1];
+      const sumRest = sectionValues.slice(0, -1).reduce((a: number, b: number) => a + b, 0);
+      const val = Math.abs(last - sumRest) < 1 ? last : sectionValues.reduce((a: number, b: number) => a + b, 0);
+      if (val > mujeres) mujeres = val; // quedarse con el mayor
+    }
+    sectionValues = [];
+    pesoCol = -1;
+    inMujeresSection = false;
+  };
+
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] ?? [];
     const rowVals = r.map((c: any) => norm(String(c ?? "")));
 
     if (rowVals.some((v: string) => v === "mujeres")) {
+      if (inMujeresSection) finalizeMujeres();
       inMujeresSection = true;
       pesoCol = -1;
       sectionValues = [];
@@ -386,20 +399,14 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
     if (inMujeresSection && rowVals.some((v: string) =>
       v === "exportacion" || v === "no exportacion" || v === "no comercial"
     )) {
-      inMujeresSection = false;
-      if (sectionValues.length > 1) {
-        const last = sectionValues[sectionValues.length - 1];
-        const sumRest = sectionValues.slice(0, -1).reduce((a, b) => a + b, 0);
-        mujeres = Math.abs(last - sumRest) < 1 ? last : sectionValues.reduce((a, b) => a + b, 0);
-      }
+      finalizeMujeres();
     }
 
     if (inMujeresSection && pesoCol === -1) {
       for (let j = 0; j < r.length; j++) {
         const cell = norm(String(r[j] ?? ""));
         if (cell === "peso (kg)" || cell === "peso(kg)" || cell === "peso kg") {
-          pesoCol = j;
-          break;
+          pesoCol = j; break;
         }
       }
       continue;
@@ -410,19 +417,13 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       if (v > 0) sectionValues.push(v);
     }
 
-    // Buscar PODRIDO en cualquier sección
     if (rowVals.some((v: string) => v === "podrido") && pesoCol >= 0) {
       const kg = toNum(r[pesoCol]);
       if (kg > 0) podrido = kg;
     }
   }
 
-  // Por si MUJERES es la última sección del archivo
-  if (inMujeresSection && sectionValues.length > 1) {
-    const last = sectionValues[sectionValues.length - 1];
-    const sumRest = sectionValues.slice(0, -1).reduce((a, b) => a + b, 0);
-    mujeres = Math.abs(last - sumRest) < 1 ? last : sectionValues.reduce((a, b) => a + b, 0);
-  }
+  if (inMujeresSection) finalizeMujeres();
 
   return { mujeres, podrido };
 }
