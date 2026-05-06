@@ -140,62 +140,125 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Prompt de sistema con reglas detalladas por tipo de archivo ──────────
-    const sysPrompt = `Eres un analista de la planta de cítricos Lasarte SAT.
-Tu tarea es extraer datos EXACTOS de archivos adjuntos del parte diario.
-NO inventes. NO redondees. NO sumes filas manualmente si existe una fila total.
-Identifica cada archivo por su NOMBRE, no por el tipo.
+    // ── Prompt de sistema: prompt fusionado completo ──────────────────────
+    const sysPrompt = `Eres un analista experto de la planta de cítricos Lasarte SAT.
 
-REGLAS POR ARCHIVO:
-1. Informe produccion:
-   - Extrae kg_produccion_total de la fila TOTAL o, si no existe, del último valor numérico válido de Peso (kg).
-   - No uses otras columnas.
-2. Informe tamaños clase y calidad por variedad:
-   - Extrae kg_mujeres_l sumando SOLO filas con clase L o texto Mujeres.
-   - Usa la columna Peso kg. No uses Fruta ni Empaques.
-3. Informe producto:
-   - Extrae kg_podrido_calibrador de la fila con Producto = PODRIDO.
-   - Excluye MUESTRA y PREC.
-4. Palets:
-   - Extrae kg_palets_alta sumando la columna Netos.
-   - Excluye filas de subtotal, total o vacías.
-5. Foto de lotes:
-   - Si hay imagen, extrae lotes visibles si aplica.
+Tu tarea es analizar los archivos adjuntos de un parte diario, extraer los datos exactos, aplicar la cascada de cálculo y devolver únicamente un JSON válido.
+No inventes, no estimes, no redondees antes del final y no mezcles columnas.
+Si un dato no existe, devuelve 0 o null según corresponda.
 
-DEVUELVE SOLO ESTE JSON (sin texto adicional, sin bloques de código):
+REGLAS GENERALES
+- Identifica los archivos por su NOMBRE, no por el tipo.
+- Usa solo datos explícitos en los archivos.
+- Si existe una fila TOTAL o subtotal, priorízala sobre cualquier suma manual.
+- Si no existe fila TOTAL, usa la última fila válida con datos numéricos.
+- No uses columnas equivocadas: si una columna se llama Peso kg, Netos, etc., usa solo esa.
+- Devuelve únicamente JSON válido. No escribas explicaciones, notas ni markdown fuera del JSON.
+- Las cantidades se expresan en kg salvo que se indique otra cosa.
+
+ARCHIVOS Y REGLAS DE EXTRACCIÓN
+
+1) INFORME DE PRODUCCIÓN
+Archivo típico: Informe-XXXX-produccion-*.xlsx
+Objetivo: Extraer kg_produccion_total.
+- Busca la columna exacta de peso, normalmente "Peso (kg)", "Peso kg" o similar.
+- Si existe fila TOTAL, usa el valor de esa fila.
+- Si no existe fila TOTAL, usa el último valor numérico válido de la columna de peso.
+- No sumes filas de detalle manualmente.
+
+2) INFORME DE TAMAÑOS / CLASE / CALIDAD
+Archivo típico: Informe-XXXX-tamanos-clase-y-calidad-por-variedad-*.xlsx
+Objetivo: Extraer kg_mujeres_l.
+- Usa la columna exacta "Peso kg" o "Pesokg".
+- Suma solo filas cuya clase sea "L" o contenga "Mujeres" en cualquier campo relevante.
+- No uses "Fruta", "Empaques" ni contadores de piezas.
+- Excluye subtotales y filas resumen.
+
+3) INFORME DE PRODUCTO
+Archivo típico: Informe-XXXX-producto-*.xlsx
+Objetivo: Extraer kg_podrido_calibrador.
+- Busca la fila cuyo Producto sea exactamente "PODRIDO" sin importar mayúsculas/minúsculas.
+- Excluye filas con "MUESTRA" y "PREC".
+- Usa la columna de peso correcta, normalmente "Peso kg" o "Pesokg".
+- Si no existe, devuelve 0.
+
+4) PALETS
+Archivo típico: palets-*.xlsx o GSTOCK-*.xlsx
+Objetivo: Extraer kg_palets_alta.
+- Usa la columna exacta "Netos" o equivalente de peso neto.
+- Suma solo filas con valor positivo.
+- Excluye filas de total, subtotales, vacías o filas de resumen.
+- No uses cajas, importes ni identificadores.
+
+5) FOTO DE LOTES
+Archivo típico: imagen JPG/PNG
+Objetivo: Extraer lotes visibles si aparecen claramente.
+- Si no se ve con claridad, devuelve lista vacía.
+- No inventes códigos de lote.
+
+CASCADA DE CÁLCULO
+Tras extraer los datos, calcula:
+1. produccion_real = kg_produccion_total - industria_manual - kg_mujeres_l - reciclado_z1 - reciclado_z2
+2. palets_ajustados = kg_palets_brutos - inventario_dia_anterior
+3. dif_bruta = produccion_real - palets_ajustados - inventario_final
+4. mermas_totales = kg_podrido_calibrador + kg_podrido_manual
+5. djpmn = dif_bruta - mermas_totales
+6. pct_djpmn = (djpmn / produccion_real) * 100
+
+REGLAS DE CÁLCULO
+- Si algún dato no existe, usa 0.
+- No redondees hasta el final. Redondea pct_djpmn a dos decimales.
+- Si produccion_real es 0, pct_djpmn debe ser 0.
+
+FORMATO DE SALIDA OBLIGATORIO
+Devuelve exactamente este JSON, sin texto adicional:
 {
   "kg_produccion_total": number,
   "kg_mujeres_l": number,
   "kg_podrido_calibrador": number,
   "kg_palets_alta": number,
+  "industria_manual": number,
+  "reciclado_z1": number,
+  "reciclado_z2": number,
+  "kg_palets_brutos": number,
+  "inventario_dia_anterior": number,
+  "inventario_final": number,
+  "kg_podrido_manual": number,
+  "produccion_real": number,
+  "palets_ajustados": number,
+  "dif_bruta": number,
+  "mermas_totales": number,
+  "djpmn": number,
+  "pct_djpmn": number,
   "produccion": [
-    {
-      "product": string,
-      "sizerange": string | null,
-      "kgproduced": number,
-      "destination": string | null
-    }
+    { "product": string, "sizerange": string | null, "kgproduced": number, "destination": string | null }
   ],
   "gstock": [
-    {
-      "product": string,
-      "sizerange": string | null,
-      "kgexpected": number
-    }
+    { "product": string, "sizerange": string | null, "kgexpected": number }
   ],
   "lotes": [
-    {
-      "lotecodigo": string,
-      "producto": string | null
-    }
+    { "lotecodigo": string, "producto": string | null }
   ],
-  "analisis": string
+  "analisis": string,
+  "fuentes": {
+    "kg_produccion_total": string | null,
+    "kg_mujeres_l": string | null,
+    "kg_podrido_calibrador": string | null,
+    "kg_palets_alta": string | null,
+    "kg_palets_brutos": string | null,
+    "inventario_dia_anterior": string | null,
+    "inventario_final": string | null,
+    "kg_podrido_manual": string | null,
+    "industria_manual": string | null,
+    "reciclado_z1": string | null,
+    "reciclado_z2": string | null
+  }
 }`;
 
-    // ── Mensaje de usuario con los CSVs extraídos ─────────────────────────
+    // ── Mensaje de usuario: fecha, lista de archivos y CSVs ───────────────
     const dateStr = parte.date ?? "desconocida";
     const fileList = csvContexts.map((c) => `- ${c.name}`).join("\n");
-    let userMsg = `Analiza estos archivos del parte diario del ${dateStr}.\nArchivos:\n${fileList}\n\nDevuelve el JSON exacto según las reglas.\n`;
+    let userMsg = `Analiza los archivos adjuntos del parte diario del ${dateStr}.\nArchivos:\n${fileList}\n\nDevuelve el JSON exacto.\n`;
     for (const c of csvContexts) {
       userMsg += `\n--- [${c.kind}] ${c.name} ---\n${c.csv}`;
     }
@@ -279,11 +342,21 @@ DEVUELVE SOLO ESTE JSON (sin texto adicional, sin bloques de código):
       console.error("Nvidia exhausted retries", lastStatus, lastBody.slice(0, 500));
     }
 
+    // ── Mapeo: clave del JSON de la IA → columna en partes_diarios ───────
+    // Prioridad: extracción server-side > valor de la IA
     const mapping: Record<string, string> = {
-      kg_produccion_total: "kg_produccion_calibrador",
-      kg_mujeres_l: "kg_mujeres_calibrador",
-      kg_podrido_calibrador: "kg_podrido_calibrador_auto",
-      kg_palets_alta: "kg_palets_brutos",
+      // Extraídos directamente
+      kg_produccion_total:  "kg_produccion_calibrador",
+      kg_mujeres_l:         "kg_mujeres_calibrador",
+      kg_podrido_calibrador:"kg_podrido_calibrador_auto",
+      kg_palets_alta:       "kg_palets_brutos",
+      // Nuevos campos del prompt fusionado
+      industria_manual:     "kg_industria_manual",
+      reciclado_z1:         "kg_reciclado_malla_z1",
+      reciclado_z2:         "kg_reciclado_malla_z2",
+      inventario_final:     "kg_inventario_sin_alta",
+      kg_podrido_manual:    "kg_podrido_bolsa_basura",
+      // inventario_dia_anterior ya se gestiona server-side arriba
     };
     const update: Record<string, any> = {};
     for (const [specKey, dbKey] of Object.entries(mapping)) {
