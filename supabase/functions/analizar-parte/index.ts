@@ -140,16 +140,66 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Construir prompt para IA (solo texto, sin imágenes)
-    const hint = "Eres analista de una empresa citricola. Extrae datos del parte diario en kg.\n" +
-      "Devuelve JSON con: kg_produccion_total, kg_mujeres_l, kg_podrido_calibrador, kg_palets_alta, notas.\n" +
-      "Solo devuelve JSON, sin texto adicional.";
+    // ── Prompt de sistema con reglas detalladas por tipo de archivo ──────────
+    const sysPrompt = `Eres un analista de la planta de cítricos Lasarte SAT.
+Tu tarea es extraer datos EXACTOS de archivos adjuntos del parte diario.
+NO inventes. NO redondees. NO sumes filas manualmente si existe una fila total.
+Identifica cada archivo por su NOMBRE, no por el tipo.
 
-    const textParts: string[] = [hint];
-    for (const c of csvContexts) {
-      textParts.push("\n--- [" + c.kind + "] " + c.name + " ---\n" + c.csv);
+REGLAS POR ARCHIVO:
+1. Informe produccion:
+   - Extrae kg_produccion_total de la fila TOTAL o, si no existe, del último valor numérico válido de Peso (kg).
+   - No uses otras columnas.
+2. Informe tamaños clase y calidad por variedad:
+   - Extrae kg_mujeres_l sumando SOLO filas con clase L o texto Mujeres.
+   - Usa la columna Peso kg. No uses Fruta ni Empaques.
+3. Informe producto:
+   - Extrae kg_podrido_calibrador de la fila con Producto = PODRIDO.
+   - Excluye MUESTRA y PREC.
+4. Palets:
+   - Extrae kg_palets_alta sumando la columna Netos.
+   - Excluye filas de subtotal, total o vacías.
+5. Foto de lotes:
+   - Si hay imagen, extrae lotes visibles si aplica.
+
+DEVUELVE SOLO ESTE JSON (sin texto adicional, sin bloques de código):
+{
+  "kg_produccion_total": number,
+  "kg_mujeres_l": number,
+  "kg_podrido_calibrador": number,
+  "kg_palets_alta": number,
+  "produccion": [
+    {
+      "product": string,
+      "sizerange": string | null,
+      "kgproduced": number,
+      "destination": string | null
     }
-    const finalText = textParts.join("\n").slice(0, 30000);
+  ],
+  "gstock": [
+    {
+      "product": string,
+      "sizerange": string | null,
+      "kgexpected": number
+    }
+  ],
+  "lotes": [
+    {
+      "lotecodigo": string,
+      "producto": string | null
+    }
+  ],
+  "analisis": string
+}`;
+
+    // ── Mensaje de usuario con los CSVs extraídos ─────────────────────────
+    const dateStr = parte.date ?? "desconocida";
+    const fileList = csvContexts.map((c) => `- ${c.name}`).join("\n");
+    let userMsg = `Analiza estos archivos del parte diario del ${dateStr}.\nArchivos:\n${fileList}\n\nDevuelve el JSON exacto según las reglas.\n`;
+    for (const c of csvContexts) {
+      userMsg += `\n--- [${c.kind}] ${c.name} ---\n${c.csv}`;
+    }
+    const finalUserMsg = userMsg.slice(0, 28000);
 
     let aiData: any = {};
     let aiWarning: string | null = null;
@@ -175,7 +225,10 @@ Deno.serve(async (req) => {
               signal: controller.signal,
               body: JSON.stringify({
                 model: model,
-                messages: [{ role: "user", content: finalText }],
+                messages: [
+                  { role: "system", content: sysPrompt },
+                  { role: "user", content: finalUserMsg },
+                ],
                 response_format: { type: "json_object" },
                 temperature: 0.1,
               }),
@@ -259,28 +312,32 @@ Deno.serve(async (req) => {
     const uid = userData.user.id;
     if (Array.isArray(aiData.produccion) && aiData.produccion.length > 0) {
       const rows = aiData.produccion
-        .filter((r: any) => Number(r?.kg_produced) > 0)
+        .filter((r: any) => Number(r?.kgproduced ?? r?.kg_produced) > 0)
         .map((r: any) => ({
           part_id, user_id: uid, date: parte.date, source: "ia",
-          product: r.product ?? null, size_range: r.size_range ?? null,
-          kg_produced: Number(r.kg_produced) || 0,
+          product: r.product ?? null,
+          size_range: r.sizerange ?? r.size_range ?? null,
+          kg_produced: Number(r.kgproduced ?? r.kg_produced) || 0,
         }));
       if (rows.length) await userClient.from("production_runs").insert(rows);
     }
     if (Array.isArray(aiData.gstock) && aiData.gstock.length > 0) {
       const rows = aiData.gstock
-        .filter((r: any) => Number(r?.kg_expected) > 0)
+        .filter((r: any) => Number(r?.kgexpected ?? r?.kg_expected) > 0)
         .map((r: any) => ({
           part_id, user_id: uid, date: parte.date, source: "ia",
-          product: r.product ?? null, size_range: r.size_range ?? null,
-          kg_expected: Number(r.kg_expected) || 0,
+          product: r.product ?? null,
+          size_range: r.sizerange ?? r.size_range ?? null,
+          kg_expected: Number(r.kgexpected ?? r.kg_expected) || 0,
         }));
       if (rows.length) await userClient.from("gstock_entries").insert(rows);
     }
     if (Array.isArray(aiData.lotes) && aiData.lotes.length > 0) {
       const rows = aiData.lotes.map((r: any) => ({
         part_id, user_id: uid, source: "ia",
-        producto: r.producto ?? null, lote_codigo: r.lote_codigo ?? null, notas: r.notas ?? null,
+        producto: r.producto ?? null,
+        lote_codigo: r.lotecodigo ?? r.lote_codigo ?? null,
+        notas: r.notas ?? null,
       }));
       if (rows.length) await userClient.from("lotes_dia").insert(rows);
     }
