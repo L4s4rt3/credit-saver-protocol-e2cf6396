@@ -53,9 +53,9 @@ export function exportPartesToExcel(partes: ParteRow[], from: string, to: string
   const totalDsj      = enriched.reduce((s, { c }) => s + c.dsj, 0);
   const totalMermas   = enriched.reduce((s, { c }) => s + c.mermas_totales, 0);
   const dsjPctGlobal  = totalProd ? (totalDsj / totalProd) * 100 : 0;
-  const nAlerta       = enriched.filter(({ c }) => Math.abs(c.dsj_pct) > 3).length;
-  const nAmarillo     = enriched.filter(({ c }) => Math.abs(c.dsj_pct) > 1 && Math.abs(c.dsj_pct) <= 3).length;
-  const nOk           = enriched.filter(({ c }) => Math.abs(c.dsj_pct) <= 1).length;
+  const nAlerta       = enriched.filter(({ c }) => Math.abs(c.dsj_pct) > 5).length;
+  const nAmarillo     = enriched.filter(({ c }) => Math.abs(c.dsj_pct) > 3 && Math.abs(c.dsj_pct) <= 5).length;
+  const nOk           = enriched.filter(({ c }) => Math.abs(c.dsj_pct) <= 3).length;
 
   const resumenAOA: (string | number)[][] = [
     ["HERRAMIENTA LASARTE — INFORME DE PARTES DIARIOS"],
@@ -235,7 +235,7 @@ export function exportPartesToPDF(partes: ParteRow[], from: string, to: string) 
   const totalDsj     = enriched.reduce((s, { c }) => s + c.dsj, 0);
   const totalMermas  = enriched.reduce((s, { c }) => s + c.mermas_totales, 0);
   const dsjPctGlobal = totalProd ? (totalDsj / totalProd) * 100 : 0;
-  const nAlerta      = enriched.filter(({ c }) => Math.abs(c.dsj_pct) > 3).length;
+  const nAlerta      = enriched.filter(({ c }) => Math.abs(c.dsj_pct) > 5).length;
 
   let pageIndex = 0;
 
