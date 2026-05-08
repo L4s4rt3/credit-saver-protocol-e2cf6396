@@ -87,7 +87,7 @@ export function CascadeView({ result }: { result: CascadeResult }) {
       badge: "bg-success/20 text-success",
       pct:   "text-success",
       icon:  Check,
-      hint:  "< 1% · OK",
+      hint:  "≤ 3% · OK",
     },
     amarillo: {
       box:   "bg-warning/10 border border-warning/30",
@@ -95,7 +95,7 @@ export function CascadeView({ result }: { result: CascadeResult }) {
       badge: "bg-warning/20 text-warning",
       pct:   "text-warning",
       icon:  AlertTriangle,
-      hint:  "1–3% · Revisar",
+      hint:  "3–5% · Revisar",
     },
     rojo: {
       box:   "bg-destructive/10 border border-destructive/30",
@@ -103,7 +103,7 @@ export function CascadeView({ result }: { result: CascadeResult }) {
       badge: "bg-destructive/20 text-destructive",
       pct:   "text-destructive",
       icon:  X,
-      hint:  "> 3% · Crítico",
+      hint:  "> 5% · Crítico",
     },
   }[result.semaforo];
 
