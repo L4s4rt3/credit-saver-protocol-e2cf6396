@@ -39,7 +39,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 
 function DSJBar({ pct }: { pct: number }) {
   const abs = Math.abs(pct);
-  const color = abs <= 1 ? "bg-success" : abs <= 3 ? "bg-warning" : "bg-destructive";
+  const color = abs <= 3 ? "bg-success" : abs <= 5 ? "bg-warning" : "bg-destructive";
   const width = Math.min((abs / 5) * 100, 100);
   return (
     <div className="flex items-center gap-2 min-w-[110px]">
@@ -48,7 +48,7 @@ function DSJBar({ pct }: { pct: number }) {
       </div>
       <span className={cn(
         "text-xs tabular-nums font-medium",
-        abs <= 1 ? "text-success" : abs <= 3 ? "text-warning" : "text-destructive"
+        abs <= 3 ? "text-success" : abs <= 5 ? "text-warning" : "text-destructive"
       )}>
         {pct >= 0 ? "+" : ""}{pct.toFixed(2)}%
       </span>
@@ -172,7 +172,7 @@ export default function PartesList() {
             </CardContent>
           </Card>
 
-          <Card className={cn("border-l-4", dsjAbs <= 1 ? "border-l-success" : dsjAbs <= 3 ? "border-l-warning" : "border-l-destructive")}>
+          <Card className={cn("border-l-4", dsjAbs <= 3 ? "border-l-success" : dsjAbs <= 5 ? "border-l-warning" : "border-l-destructive")}>
             <CardContent className="p-4">
               <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
                 <TrendingDown className="h-3.5 w-3.5" />
@@ -181,7 +181,7 @@ export default function PartesList() {
               <p className="text-xl font-bold tabular-nums">{formatKg(totals.dsj)}</p>
               <p className={cn(
                 "text-xs font-semibold mt-0.5 tabular-nums",
-                dsjAbs <= 1 ? "text-success" : dsjAbs <= 3 ? "text-warning" : "text-destructive"
+                dsjAbs <= 3 ? "text-success" : dsjAbs <= 5 ? "text-warning" : "text-destructive"
               )}>
                 {totals.dsj_pct >= 0 ? "+" : ""}{totals.dsj_pct.toFixed(2)}% global
               </p>
@@ -319,7 +319,7 @@ export default function PartesList() {
                         key={p.id}
                         className={cn(
                           "cursor-pointer transition-colors group",
-                          abs > 3
+                          abs > 5
                             ? "bg-destructive/[0.04] hover:bg-destructive/[0.08]"
                             : "hover:bg-muted/40"
                         )}
@@ -332,7 +332,7 @@ export default function PartesList() {
                         <td className="px-4 py-3"><DSJBar pct={p.cascade.dsj_pct} /></td>
                         <td className={cn(
                           "px-4 py-3 text-right tabular-nums font-semibold",
-                          abs <= 1 ? "text-success" : abs <= 3 ? "text-warning" : "text-destructive"
+                          abs <= 3 ? "text-success" : abs <= 5 ? "text-warning" : "text-destructive"
                         )}>
                           {formatKg(p.cascade.dsj)}
                         </td>
@@ -375,7 +375,7 @@ export default function PartesList() {
                       <td className="px-4 py-3"><DSJBar pct={totals.dsj_pct} /></td>
                       <td className={cn(
                         "px-4 py-3 text-right tabular-nums font-bold",
-                        dsjAbs <= 1 ? "text-success" : dsjAbs <= 3 ? "text-warning" : "text-destructive"
+                        dsjAbs <= 3 ? "text-success" : dsjAbs <= 5 ? "text-warning" : "text-destructive"
                       )}>
                         {formatKg(totals.dsj)}
                       </td>

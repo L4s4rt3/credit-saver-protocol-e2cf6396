@@ -23,7 +23,7 @@ function ChartTooltip({ active, payload, label }: any) {
   const prod = payload.find((p: any) => p.dataKey === "produccion");
   const palets = payload.find((p: any) => p.dataKey === "palets");
   const abs = Math.abs(dsj?.value ?? 0);
-  const semColor = abs <= 1 ? "text-success" : abs <= 3 ? "text-warning" : "text-destructive";
+  const semColor = abs <= 5 ? "text-success" : abs <= 5 ? "text-warning" : "text-destructive";
   return (
     <div className="rounded-lg border bg-card shadow-lg p-3 text-xs space-y-1.5 min-w-[160px]">
       <p className="font-semibold text-foreground border-b pb-1.5 mb-1.5">{label}</p>
@@ -105,7 +105,7 @@ export default function Dashboard() {
               value={formatKg(totals.dsj)}
               hint={`${totals.dsj_pct >= 0 ? "+" : ""}${totals.dsj_pct.toFixed(2)}%`}
               icon={TrendingDown}
-              trend={Math.abs(totals.dsj_pct) <= 1 ? "neutral" : "down"}
+              trend={Math.abs(totals.dsj_pct) <= 3 ? "neutral" : "down"}
             />
           </>
         )}
@@ -190,12 +190,12 @@ export default function Dashboard() {
                   dot={(props: any) => {
                     const { cx, cy, payload } = props;
                     const abs = Math.abs(payload.dsj_pct);
-                    const color = abs <= 1
+                    const color = abs <= 3
                       ? "hsl(var(--success))"
-                      : abs <= 3
+                      : abs <= 5
                         ? "hsl(var(--warning))"
                         : "hsl(var(--destructive))";
-                    return <circle key={cx} cx={cx} cy={cy} r={abs > 3 ? 4 : 3} fill={color} stroke="white" strokeWidth={1} />;
+                    return <circle key={cx} cx={cx} cy={cy} r={abs > 5 ? 4 : 3} fill={color} stroke="white" strokeWidth={1} />;
                   }}
                   activeDot={{ r: 5 }}
                   name="dsj_pct"
@@ -231,11 +231,11 @@ export default function Dashboard() {
                       to={`/partes/${p.id}`}
                       className={cn(
                         "flex items-center justify-between px-6 py-3.5 hover:bg-muted/40 transition-colors",
-                        abs > 3 && "bg-destructive/[0.03] hover:bg-destructive/[0.07]"
+                        abs > 5 && "bg-destructive/[0.03] hover:bg-destructive/[0.07]"
                       )}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        {abs > 3 && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                        {abs > 5 && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
                         <span className="font-medium whitespace-nowrap">{formatDate(p.date)}</span>
                         <StatusBadge estado={p.estado} />
                       </div>
@@ -243,7 +243,7 @@ export default function Dashboard() {
                         <span className="tabular-nums hidden sm:inline">{formatKg(p.cascade.produccion_real)} prod.</span>
                         <span className={cn(
                           "tabular-nums font-semibold",
-                          abs <= 1 ? "text-success" : abs <= 3 ? "text-warning" : "text-destructive"
+                          abs <= 5 ? "text-success" : abs <= 5 ? "text-warning" : "text-destructive"
                         )}>
                           {p.cascade.dsj_pct >= 0 ? "+" : ""}{p.cascade.dsj_pct.toFixed(2)}%
                         </span>
