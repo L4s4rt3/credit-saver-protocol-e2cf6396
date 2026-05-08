@@ -2,8 +2,9 @@
  * Modelo DSJ — Cascada de producción citrícola Lasarte SAT.
  *
  * Producción real = Calibrador + Industria manual − Mujeres(L) − Reciclado Z1 − Reciclado Z2
- * Palets ajustados = Palets brutos − Inventario día anterior
- * Diferencia bruta = Producción real − Palets ajustados − Inventario final sin alta
+ * Palets ajustados = Palets brutos − Inventario sin alta de D-1
+ * (los palets sin alta de D-1 se dan de alta en D, por eso se restan a los brutos de D)
+ * Diferencia bruta = Producción real − Palets ajustados − Inventario final sin alta (D)
  * Mermas totales = Podrido calibrador + Podrido manual (bolsa basura)
  * DSJ = Diferencia bruta − Mermas totales   (diferencia justificada por podrido y merma natural)
  * % DSJ = DSJ / Producción real
@@ -64,6 +65,8 @@ export function computeCascade(input: CascadeInput): CascadeResult {
   const palets_brutos = n(input.kg_palets_brutos);
   const inventario_anterior = n(input.kg_inventario_anterior_sin_alta);
   const inventario_final = n(input.kg_inventario_sin_alta);
+  // Metodología: ajustar palets por el inventario sin alta del día anterior.
+  // El inventario final del día (sin alta) se descuenta en la diferencia bruta.
   const palets_ajustados = palets_brutos - inventario_anterior;
 
   const diferencia_bruta = produccion_real - palets_ajustados - inventario_final;
@@ -77,7 +80,7 @@ export function computeCascade(input: CascadeInput): CascadeResult {
 
   const abs = Math.abs(dsj_pct);
   const semaforo: "verde" | "amarillo" | "rojo" =
-    abs < 1 ? "verde" : abs <= 3 ? "amarillo" : "rojo";
+    abs <= 3 ? "verde" : abs <= 5 ? "amarillo" : "rojo";
 
   return {
     produccion_calibrador,
