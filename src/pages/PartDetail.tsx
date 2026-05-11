@@ -531,9 +531,70 @@ export default function PartDetail() {
           <TabsTrigger value="notas">Notas</TabsTrigger>
         </TabsList>
 
+<<<<<<< fix/parser-and-tabs-reorganization
         {/* ── TAB: Informes & Análisis (unificado) ─────────────────────────── */}
         <TabsContent value="informes" className="mt-4 space-y-4">
           {/* Upload zone */}
+=======
+        {/* ── TAB: Análisis dashboard ──────────────────────────────────────── */}
+        <TabsContent value="analisis" className="mt-4">
+          {estadoAnalisis === "idle" && !analisis && (
+            <Card>
+              <CardContent className="py-16 text-center space-y-4">
+                <BarChart3 className="h-10 w-10 text-muted-foreground/30 mx-auto" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Análisis completo de informes</p>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                    Sube los informes Excel en el tab "Importar" y pulsa <strong>Analizar informes</strong>
+                    para obtener KPIs, alertas y gráficos del día.
+                  </p>
+                </div>
+                <Button onClick={handleAnalizarInformes} disabled={archivos.filter(a => a.file_name?.endsWith(".xlsx") || a.file_name?.endsWith(".xls")).length === 0}>
+                  <BarChart3 className="h-4 w-4" />
+                  Analizar ahora
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {(estadoAnalisis === "parseando" || estadoAnalisis === "calculando" || estadoAnalisis === "guardando") && (
+            <Card>
+              <CardContent className="py-12 text-center space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+                <p className="text-sm font-medium">{progresoAnalisis || "Procesando…"}</p>
+                <p className="text-xs text-muted-foreground">Esto tarda unos segundos</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {estadoAnalisis === "error" && (
+            <Card>
+              <CardContent className="py-12 text-center space-y-3">
+                <p className="text-sm text-destructive font-medium">Error en el análisis</p>
+                <Button variant="outline" size="sm" onClick={resetAnalisis}>Reintentar</Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {estadoAnalisis === "listo" && analisis && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Análisis de {archivos.filter(a => a.file_name?.endsWith(".xlsx")).length} archivos ·{" "}
+                  {new Date(analisis.fecha_analisis).toLocaleString("es-ES")}
+                </p>
+                <Button variant="ghost" size="sm" onClick={resetAnalisis} className="text-xs h-7">
+                  Limpiar
+                </Button>
+              </div>
+              <AnalisisDashboard analisis={analisis} fechaParte={parte.date} />
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── TAB: Importar informes (M1) ─────────────────────────────────── */}
+        <TabsContent value="informes" className="mt-4">
+>>>>>>> main
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
