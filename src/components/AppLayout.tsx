@@ -9,8 +9,6 @@ import {
   Users,
   ChevronRight,
   TrendingDown,
-  Warehouse,
-  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useI18n } from "@/lib/i18n";
@@ -185,68 +183,6 @@ export default function AppLayout() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-            </SidebarMenu>
-          </SidebarGroup>
-
-          {/* ── Producción (collapsible group) ── */}
-          <SidebarGroup>
-            <SidebarGroupLabel>Producción</SidebarGroupLabel>
-            <SidebarMenu>
-              {/* Stock en cámara */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === "/stock"}
-                  tooltip="Stock en cámara"
-                >
-                  <NavLink to="/stock">
-                    <Warehouse />
-                    <span>Stock en cámara</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              {/* Productores */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === "/productores"}
-                  tooltip="Productores"
-                >
-                  <NavLink to="/productores">
-                    <Users />
-                    <span>Productores</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              {/* Análisis informes */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === "/analisis/informes"}
-                  tooltip="Análisis Informes"
-                >
-                  <NavLink to="/analisis/informes">
-                    <FileText />
-                    <span>Análisis Informes</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              {/* Análisis calibres */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === "/analisis/calibres"}
-                  tooltip="Calibres"
-                >
-                  <NavLink to="/analisis/calibres">
-                    <BarChart3 />
-                    <span>Calibres</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
 
