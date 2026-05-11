@@ -175,14 +175,14 @@ async function guardarEnSupabase(
         prodInforme.lotes.map((l) => ({
           part_id: partId,
           user_id: userId,
-          lote_codigo: l.lote_codigo,
-          productor: l.productor,
-          producto: l.producto,
-          kg_peso_total: l.kg_peso_total,
-          toneladas_hora: l.toneladas_hora,
-          duracion_min: l.duracion_min,
-          peso_fruta_promedio_g: l.peso_fruta_promedio_g,
-          hora_inicio: l.hora_inicio,
+          lote_codigo:            l.id_lote ?? l.lote_codigo,
+          productor:              l.nombre_productor ?? l.productor,
+          producto:               l.variedad ?? l.producto,
+          kg_peso_total:          l.kg_peso_total,
+          toneladas_hora:         l.toneladas_hora,
+          duracion_min:           l.duracion_min,
+          peso_fruta_promedio_g:  l.peso_fruta_promedio_g,
+          hora_inicio:            l.tiempo_inicio ?? l.hora_inicio,
           source: "manual",
         })) as any
       )
