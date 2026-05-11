@@ -180,7 +180,7 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
 
     const providers = [
       ...(DEEPSEEK_API_KEY ? [{ name: "DeepSeek", url: "https://api.deepseek.com/v1/chat/completions", key: DEEPSEEK_API_KEY, model: "deepseek-chat" }] : []),
-      ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "meta/llama-3.3-70b-instruct" }] : []),
+      ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "deepseek-ai/deepseek-v4-flash" }] : []),
     ];
     const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
