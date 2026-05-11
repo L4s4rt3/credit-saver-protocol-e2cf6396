@@ -29,10 +29,11 @@ Deno.serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
     const NVIDIA_API_KEY = Deno.env.get("NVIDIA_API_KEY");
-    if (!DEEPSEEK_API_KEY && !NVIDIA_API_KEY) {
-      return json({ error: "Ninguna API key configurada (DEEPSEEK/NVIDIA)" }, 500);
+    if (!GROQ_API_KEY && !DEEPSEEK_API_KEY && !NVIDIA_API_KEY) {
+      return json({ error: "Ninguna API key configurada (GROQ/DEEPSEEK/NVIDIA)" }, 500);
     }
 
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -179,33 +180,41 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
     let succeeded = false;
 
     const providers = [
-      ...(DEEPSEEK_API_KEY ? [{ name: "DeepSeek", url: "https://api.deepseek.com/v1/chat/completions", key: DEEPSEEK_API_KEY, model: "deepseek-chat" }] : []),
-      ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "meta/llama-3.3-70b-instruct" }] : []),
+      ...(GROQ_API_KEY ? [{ name: "Groq", url: "https://api.groq.com/openai/v1/chat/completions", key: GROQ_API_KEY, model: "llama-3.3-70b-versatile", jsonMode: true }] : []),
+      ...(DEEPSEEK_API_KEY ? [{ name: "DeepSeek", url: "https://api.deepseek.com/v1/chat/completions", key: DEEPSEEK_API_KEY, model: "deepseek-chat", jsonMode: true }] : []),
+      ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "meta/llama-3.3-70b-instruct", jsonMode: false }] : []),
     ];
     const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
     outer: for (const provider of providers) {
       for (let attempt = 0; attempt < 3; attempt++) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
+        const timeout = setTimeout(() => controller.abort(), 45000);
         try {
           console.log("[IA] " + provider.name + " modelo=" + provider.model + " intento=" + (attempt + 1));
+          const reqBody: any = {
+            model: provider.model,
+            messages: [{ role: "system", content: sysPrompt }, { role: "user", content: finalUserMsg }],
+            temperature: 0.1,
+          };
+          if (provider.jsonMode) reqBody.response_format = { type: "json_object" };
           const aiResp = await fetch(provider.url, {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": "Bearer " + provider.key },
             signal: controller.signal,
-            body: JSON.stringify({
-              model: provider.model,
-              messages: [{ role: "system", content: sysPrompt }, { role: "user", content: finalUserMsg }],
-              response_format: { type: "json_object" },
-              temperature: 0.1,
-            }),
+            body: JSON.stringify(reqBody),
           });
           clearTimeout(timeout);
           if (aiResp.ok) {
             const aiJson = await aiResp.json();
-            const text = aiJson?.choices?.[0]?.message?.content ?? "{}";
-            try { aiData = JSON.parse(text); succeeded = true; } catch { aiWarning = provider.name + ": JSON invalido"; aiData = {}; succeeded = true; }
+            let text = aiJson?.choices?.[0]?.message?.content ?? "{}";
+            // Strip markdown code fences if model wraps JSON
+            text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+            try { aiData = JSON.parse(text); succeeded = true; } catch {
+              const m = text.match(/\{[\s\S]*\}/);
+              if (m) { try { aiData = JSON.parse(m[0]); succeeded = true; } catch { /* fall through */ } }
+              if (!succeeded) { aiWarning = provider.name + ": JSON invalido"; aiData = {}; succeeded = true; }
+            }
             console.log("[IA] " + provider.name + " OK");
             break outer;
           }
