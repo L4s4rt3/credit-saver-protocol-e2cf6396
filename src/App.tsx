@@ -19,6 +19,7 @@ import StockCamara from "./pages/StockCamara";
 import Productores from "./pages/Productores";
 import CalibreAnalysis from "./pages/CalibreAnalysis";
 import AnalisisInformes from "./pages/AnalisisInformes";
+import AnalisisDiario from "./pages/AnalisisDiario";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ const App = () => (
                 <Route path="/productores" element={<Productores />} />
                 <Route path="/analisis/calibres" element={<CalibreAnalysis />} />
                 <Route path="/analisis/informes" element={<AnalisisInformes />} />
+                <Route path="/analisis/diario" element={<AnalisisDiario />} />
               </Route>
               <Route path="/index" element={<Navigate to="/" replace />} />
               <Route path="*" element={<NotFound />} />
