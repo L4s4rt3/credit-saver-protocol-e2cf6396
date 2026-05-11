@@ -180,14 +180,14 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
 
     const providers = [
       ...(DEEPSEEK_API_KEY ? [{ name: "DeepSeek", url: "https://api.deepseek.com/v1/chat/completions", key: DEEPSEEK_API_KEY, model: "deepseek-chat", jsonMode: true }] : []),
-      ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "qwen/qwen3-next-80b-a3b-instruct", jsonMode: false }] : []),
+      ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "meta/llama-3.3-70b-instruct", jsonMode: false }] : []),
     ];
     const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
     outer: for (const provider of providers) {
       for (let attempt = 0; attempt < 3; attempt++) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 60000);
+        const timeout = setTimeout(() => controller.abort(), 45000);
         try {
           console.log("[IA] " + provider.name + " modelo=" + provider.model + " intento=" + (attempt + 1));
           const reqBody: any = {
@@ -206,12 +206,12 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
           if (aiResp.ok) {
             const aiJson = await aiResp.json();
             let text = aiJson?.choices?.[0]?.message?.content ?? "{}";
-            // Strip markdown code fences if model wraps JSON in ```json ... ```
+            // Strip markdown code fences if model wraps JSON in ```json...```
             text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
             try { aiData = JSON.parse(text); succeeded = true; } catch {
-              // Fallback: find JSON object in response text
-              const jsonMatch = text.match(/\{[\s\S]*\}/);
-              if (jsonMatch) { try { aiData = JSON.parse(jsonMatch[0]); succeeded = true; } catch { /* fall through */ } }
+              // Fallback: extract first JSON object from response
+              const m = text.match(/\{[\s\S]*\}/);
+              if (m) { try { aiData = JSON.parse(m[0]); succeeded = true; } catch { /* fall through */ } }
               if (!succeeded) { aiWarning = provider.name + ": JSON invalido"; aiData = {}; succeeded = true; }
             }
             console.log("[IA] " + provider.name + " OK");
