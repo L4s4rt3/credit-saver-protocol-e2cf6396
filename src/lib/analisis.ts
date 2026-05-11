@@ -110,6 +110,12 @@ export interface AnalisisDia {
   serie_calibres: { name: string; export: number; mercado: number; industria: number; total: number }[];
   serie_destinos: { name: string; value: number; color: string }[];
   serie_tph_por_lote: { lote: string; productor: string; tph: number }[];
+
+  // Datos brutos para las tablas detalladas (todos los campos capturados)
+  _raw_produccion?: ParsedProduccion | null;
+  _raw_palets?: ParsedPalets | null;
+  _raw_producto?: ParsedProducto | null;
+  _raw_calibres?: ParsedCalibres | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -197,7 +203,7 @@ export function computeAnalisis(
 
   const mapProductores: Record<string, { kg: number; lotes: LoteProduccion[] }> = {};
   for (const l of lotes) {
-    const key = l.productor ?? "Sin productor";
+    const key = l.nombre_productor ?? l.productor ?? "Sin productor";
     if (!mapProductores[key]) mapProductores[key] = { kg: 0, lotes: [] };
     mapProductores[key].kg += l.kg_peso_total;
     mapProductores[key].lotes.push(l);
@@ -220,16 +226,17 @@ export function computeAnalisis(
       peso_fruta_avg_g: peso_avg,
     };
   }).sort((a, b) => b.kg_total - a.kg_total);
-
   // ── 4. Calibres ───────────────────────────────────────────────────────
 
   const rawCalibs = calibres?.calibres ?? [];
   const calibresMap: Record<string, { piezas: number; kg: number; export: number; clase: string | null; grupo: string | null }> = {};
   for (const c of rawCalibs) {
-    if (!calibresMap[c.calibre]) calibresMap[c.calibre] = { piezas: 0, kg: 0, export: 0, clase: c.clase, grupo: c.grupo_destino };
-    calibresMap[c.calibre].piezas += c.piezas;
-    calibresMap[c.calibre].kg += c.kg;
-    if (normGrupo(c.grupo_destino) === "exportacion") calibresMap[c.calibre].export += c.kg;
+    // Usar tamanos o variedad como clave de calibre
+    const key = c.tamanos ?? c.variedad ?? c.calibre ?? "—";
+    if (!calibresMap[key]) calibresMap[key] = { piezas: 0, kg: 0, export: 0, clase: c.clase, grupo: c.grupo ?? c.grupo_destino };
+    calibresMap[key].piezas += c.piezas;
+    calibresMap[key].kg += c.kg;
+    if (normGrupo(c.grupo ?? c.grupo_destino) === "exportacion") calibresMap[key].export += c.kg;
   }
   const kg_total_calibres = Object.values(calibresMap).reduce((s, v) => s + v.kg, 0);
 
@@ -242,7 +249,6 @@ export function computeAnalisis(
     clase: d.clase,
     grupo_destino: d.grupo,
   })).sort((a, b) => b.kg - a.kg);
-
   const top_calibre = calibresArr[0]?.calibre ?? null;
   const top_calibre_pct = calibresArr[0]?.pct_total ?? 0;
 
@@ -447,6 +453,11 @@ export function computeAnalisis(
     serie_calibres,
     serie_destinos,
     serie_tph_por_lote,
+    // Datos brutos — para las tablas detalladas con todos los campos
+    _raw_produccion: produccion,
+    _raw_palets:     palets,
+    _raw_producto:   producto,
+    _raw_calibres:   calibres,
   };
 }
 
