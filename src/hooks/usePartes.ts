@@ -82,7 +82,7 @@ export function usePartes() {
   const [partes, setPartes] = useState<Parte[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetch = useCallback(async () => {
+  const fetchPartes = useCallback(async () => {
     const { data, error } = await supabase
       .from("partes_diarios")
       .select("*")
@@ -97,7 +97,7 @@ export function usePartes() {
   }, []);
 
   useEffect(() => {
-    fetch();
+    fetchPartes();
 
     // Realtime: actualiza la lista ante cualquier cambio en partes_diarios
     const channel = supabase
@@ -105,14 +105,14 @@ export function usePartes() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "partes_diarios" },
-        () => fetch()
+        () => fetchPartes()
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [fetch]);
+    return () => { channel.unsubscribe(); };
+  }, [fetchPartes]);
 
-  return { partes, loading, refetch: fetch };
+  return { partes, loading, refetch: fetchPartes };
 }
 
 // ─── Hook de partes filtrados (para PartesList) ──────────────────────────────
