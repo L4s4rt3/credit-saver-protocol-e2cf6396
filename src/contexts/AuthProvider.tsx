@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useReducer, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -14,31 +14,51 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+interface AuthState {
+  session: Session | null;
+  user: User | null;
+  role: Role;
+  loading: boolean;
+}
+
+type AuthAction =
+  | { type: "SET_AUTH"; session: Session | null; user: User | null }
+  | { type: "SET_ROLE"; role: Role }
+  | { type: "SET_LOADING"; loading: boolean }
+  | { type: "RESET" };
+
+function authReducer(state: AuthState, action: AuthAction): AuthState {
+  switch (action.type) {
+    case "SET_AUTH":
+      return { ...state, session: action.session, user: action.user };
+    case "SET_ROLE":
+      return { ...state, role: action.role };
+    case "SET_LOADING":
+      return { ...state, loading: action.loading };
+    case "RESET":
+      return { session: null, user: null, role: null, loading: false };
+  }
+}
+
+const initialState: AuthState = { session: null, user: null, role: null, loading: true };
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<Role>(null);
-  const [loading, setLoading] = useState(true);
+  const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
-    // 1. Subscribe FIRST
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
+      dispatch({ type: "SET_AUTH", session: newSession, user: newSession?.user ?? null });
       if (newSession?.user) {
-        // defer role fetch to avoid deadlock
         setTimeout(() => fetchRole(newSession.user!.id), 0);
       } else {
-        setRole(null);
+        dispatch({ type: "SET_ROLE", role: null });
       }
     });
 
-    // 2. Then get current session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
+      dispatch({ type: "SET_AUTH", session: s, user: s?.user ?? null });
       if (s?.user) fetchRole(s.user.id);
-      setLoading(false);
+      dispatch({ type: "SET_LOADING", loading: false });
     });
 
     return () => sub.subscription.unsubscribe();
@@ -50,16 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select("role")
       .eq("user_id", userId)
       .maybeSingle();
-    setRole((data?.role as Role) ?? "operario");
+    dispatch({ type: "SET_ROLE", role: (data?.role as Role) ?? "operario" });
   }
 
   async function signOut() {
     await supabase.auth.signOut();
-    setRole(null);
+    dispatch({ type: "RESET" });
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, role, loading, signOut }}>
+    <AuthContext.Provider value={{ user: state.user, session: state.session, role: state.role, loading: state.loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );
