@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
           if (v > 0) server.kg_produccion_calibrador = v;
         }
 
-        const csv = rowsAll.map((r) => r.map((c) => (c == null ? "" : String(c))).join(",")).join("\n").slice(0, 6000);
+        const csv = rowsAll.map((r) => r.map((c) => (c == null ? "" : String(c))).join(",")).join("\n").slice(0, 1500);
         csvContexts.push({ name: f.file_name ?? "", kind, csv });
       } catch (e) { console.warn("xlsx parse fail", f.file_name, e); }
     }
@@ -171,7 +171,7 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
     const dateStr = parte.date ?? "desconocida";
     let userMsg = `Parte ${dateStr}. Archivos:\n${csvContexts.map(c => "- " + c.name).join("\n")}\n`;
     for (const c of csvContexts) userMsg += "\n--- [" + c.kind + "] " + c.name + " ---\n" + c.csv;
-    const finalUserMsg = userMsg.slice(0, 28000);
+    const finalUserMsg = userMsg.slice(0, 8000);
 
     // ── Llamada IA con fallback DeepSeek -> NVIDIA ────────────────────────
     let aiData: any = {};
@@ -181,23 +181,26 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
     let succeeded = false;
 
     const providers = [
-      ...(OPENCODE_API_KEY ? [{ name: "OpenCode", url: "https://opencode.ai/zen/v1/chat/completions", key: OPENCODE_API_KEY, model: "deepseek-v4-flash-free", jsonMode: true }] : []),
-      ...(GROQ_API_KEY ? [{ name: "Groq", url: "https://api.groq.com/openai/v1/chat/completions", key: GROQ_API_KEY, model: "qwen/qwen3-32b", jsonMode: true }] : []),
+      ...(OPENCODE_API_KEY ? [{ name: "OpenCode", url: "https://opencode.ai/zen/v1/chat/completions", key: OPENCODE_API_KEY, model: "ring-2.6-1t-free", jsonMode: true }] : []),
+      ...(GROQ_API_KEY ? [{ name: "Groq", url: "https://api.groq.com/openai/v1/chat/completions", key: GROQ_API_KEY, model: "llama-3.3-70b-versatile", jsonMode: false }] : []),
       ...(DEEPSEEK_API_KEY ? [{ name: "DeepSeek", url: "https://api.deepseek.com/v1/chat/completions", key: DEEPSEEK_API_KEY, model: "deepseek-chat", jsonMode: true }] : []),
       ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "meta/llama-3.3-70b-instruct", jsonMode: false }] : []),
     ];
     const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
     outer: for (const provider of providers) {
-      for (let attempt = 0; attempt < 3; attempt++) {
+      const timeoutMs = provider.name === "OpenCode" ? 45000 : 30000;
+      const maxAttempts = provider.name === "OpenCode" ? 3 : 1;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 45000);
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
         try {
           console.log("[IA] " + provider.name + " modelo=" + provider.model + " intento=" + (attempt + 1));
           const reqBody: any = {
             model: provider.model,
             messages: [{ role: "system", content: sysPrompt }, { role: "user", content: finalUserMsg }],
             temperature: 0.1,
+            max_tokens: 4096,
           };
           if (provider.jsonMode) reqBody.response_format = { type: "json_object" };
           const aiResp = await fetch(provider.url, {
@@ -265,30 +268,36 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
     if (upErr) return json({ error: "No se pudo actualizar: " + upErr.message }, 500);
 
     // ── Limpiar tablas de detalle previas (source=ia) ─────────────────────
-    await userClient.from("production_runs").delete().eq("part_id", part_id);
-    await userClient.from("gstock_entries").delete().eq("part_id", part_id);
-    await userClient.from("lotes_dia").delete().eq("part_id", part_id).eq("source", "ia");
-    await userClient.from("palets_dia").delete().eq("part_id", part_id).eq("source", "ia");
-    await userClient.from("producto_dia").delete().eq("part_id", part_id).eq("source", "ia");
-    await userClient.from("calibres_dia").delete().eq("part_id", part_id).eq("source", "ia");
+    await Promise.all([
+      userClient.from("production_runs").delete().eq("part_id", part_id),
+      userClient.from("gstock_entries").delete().eq("part_id", part_id),
+      userClient.from("lotes_dia").delete().eq("part_id", part_id).eq("source", "ia"),
+      userClient.from("palets_dia").delete().eq("part_id", part_id).eq("source", "ia"),
+      userClient.from("producto_dia").delete().eq("part_id", part_id).eq("source", "ia"),
+      userClient.from("calibres_dia").delete().eq("part_id", part_id).eq("source", "ia"),
+    ]);
 
     const uid = userData.user.id;
 
     // ── production_runs (legacy) ──────────────────────────────────────────
     if (Array.isArray(aiData.produccion)) {
-      const rows = aiData.produccion.filter((r: any) => Number(r?.kgproduced) > 0).map((r: any) => ({
-        part_id, user_id: uid, date: parte.date, source: "ia",
-        product: r.product ?? null, size_range: r.sizerange ?? null, kg_produced: Number(r.kgproduced) || 0,
-      }));
+      const rows = aiData.produccion.flatMap((r: any) =>
+        Number(r?.kgproduced) > 0 ? [{
+          part_id, user_id: uid, date: parte.date, source: "ia",
+          product: r.product ?? null, size_range: r.sizerange ?? null, kg_produced: Number(r.kgproduced) || 0,
+        }] : []
+      );
       if (rows.length) await userClient.from("production_runs").insert(rows);
     }
 
     // ── gstock_entries (legacy) ───────────────────────────────────────────
     if (Array.isArray(aiData.gstock)) {
-      const rows = aiData.gstock.filter((r: any) => Number(r?.kgexpected) > 0).map((r: any) => ({
-        part_id, user_id: uid, date: parte.date, source: "ia",
-        product: r.product ?? null, size_range: r.sizerange ?? null, kg_expected: Number(r.kgexpected) || 0,
-      }));
+      const rows = aiData.gstock.flatMap((r: any) =>
+        Number(r?.kgexpected) > 0 ? [{
+          part_id, user_id: uid, date: parte.date, source: "ia",
+          product: r.product ?? null, size_range: r.sizerange ?? null, kg_expected: Number(r.kgexpected) || 0,
+        }] : []
+      );
       if (rows.length) await userClient.from("gstock_entries").insert(rows);
     }
 
