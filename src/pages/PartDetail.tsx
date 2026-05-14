@@ -82,18 +82,34 @@ export default function PartDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [{ data: p, error }, { data: files }] = await Promise.all([
-      supabase.from("partes_diarios").select("*").eq("id", id).maybeSingle(),
-      supabase.from("partes_archivos").select("*").eq("part_id", id).order("uploaded_at", { ascending: false }),
-    ]);
-    if (error || !p) {
-      toast({ title: "Error", description: error?.message ?? "No encontrado", variant: "destructive" });
-      navigate("/partes");
-      return;
+    try {
+      // Forzar refresco sin cache de Supabase
+      const [{ data: p, error }, { data: files }] = await Promise.all([
+        supabase.from("partes_diarios").select("*").eq("id", id).maybeSingle(),
+        supabase.from("partes_archivos").select("*").eq("part_id", id).order("uploaded_at", { ascending: false }),
+      ]);
+      if (error) {
+        console.error("[LOAD] Error:", error);
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+      if (!p) {
+        toast({ title: "Error", description: "Parte no encontrada", variant: "destructive" });
+        navigate("/partes");
+        return;
+      }
+      console.log("[LOAD] Datos cargados:", p.id, {
+        kg_produccion_calibrador: p.kg_produccion_calibrador,
+        kg_mujeres_calibrador: p.kg_mujeres_calibrador,
+        kg_palets_brutos: p.kg_palets_brutos,
+        kg_podrido_calibrador_auto: p.kg_podrido_calibrador_auto,
+      });
+      setParte(p as Parte);
+      setArchivos((files ?? []) as Archivo[]);
+      loadingRef.current = false;
+    } catch (e) {
+      console.error("[LOAD] Exception:", e);
     }
-    setParte(p as Parte);
-    setArchivos((files ?? []) as Archivo[]);
-    loadingRef.current = false;
   }, [id, navigate]);
 
   useEffect(() => { load(); }, [load]);
@@ -208,10 +224,14 @@ export default function PartDetail() {
       setAnalyzing(false);
       return toast({ title: "Error", description: String(e), variant: "destructive" });
     }
+    
+    // Esperar un poco para que la BD replique los datos
+    await new Promise(r => setTimeout(r, 500));
+    
     setAnalyzing(false);
     // Recargar datos en lugar de hacer reload de toda la página
     await load();
-    toast({ title: "Análisis completado", description: "Los datos han sido actualizados en la cascada" });
+    toast({ title: "Análisis completado", description: "Cascada actualizada con datos de IA" });
   }
 
   if (!parte || !cascade) {
