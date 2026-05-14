@@ -33,9 +33,10 @@ Deno.serve(async (req) => {
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const OPENCODE_API_KEY = Deno.env.get("OPENCODE_API_KEY");
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
     const NVIDIA_API_KEY = Deno.env.get("NVIDIA_API_KEY");
-    if (!OPENCODE_API_KEY && !GROQ_API_KEY && !DEEPSEEK_API_KEY && !NVIDIA_API_KEY) {
+    if (!OPENCODE_API_KEY && !GROQ_API_KEY && !GEMINI_API_KEY && !DEEPSEEK_API_KEY && !NVIDIA_API_KEY) {
       return json({ error: "Ninguna API key configurada (OPENCODE/GROQ/DEEPSEEK/NVIDIA)" }, 500);
     }
 
@@ -184,6 +185,7 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
 
     const providers = [
       ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "meta/llama-3.3-70b-instruct", jsonMode: true }] : []),
+      ...(GEMINI_API_KEY ? [{ name: "Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: GEMINI_API_KEY, model: "gemini-2.0-flash", jsonMode: false }] : []),
       ...(OPENCODE_API_KEY ? [{ name: "OpenCode", url: "https://opencode.ai/zen/v1/chat/completions", key: OPENCODE_API_KEY, model: "ring-2.6-1t-free", jsonMode: true }] : []),
       ...(GROQ_API_KEY ? [{ name: "Groq", url: "https://api.groq.com/openai/v1/chat/completions", key: GROQ_API_KEY, model: "llama-3.3-70b-versatile", jsonMode: false }] : []),
       ...(DEEPSEEK_API_KEY ? [{ name: "DeepSeek", url: "https://api.deepseek.com/v1/chat/completions", key: DEEPSEEK_API_KEY, model: "deepseek-chat", jsonMode: true }] : []),
