@@ -335,15 +335,20 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
     const { data: verificacion } = await userClient.from("partes_diarios").select("kg_produccion_calibrador, kg_mujeres_calibrador, kg_palets_brutos, kg_podrido_calibrador_auto").eq("id", part_id).maybeSingle();
     console.log("[VERIFY] Datos guardados en BD:", JSON.stringify(verificacion));
 
-    // ── Limpiar tablas de detalle previas (source=ia) ─────────────────────
-    await Promise.all([
-      admin.from("production_runs").delete().eq("part_id", part_id).eq("source", "ia"),
-      admin.from("gstock_entries").delete().eq("part_id", part_id).eq("source", "ia"),
-      admin.from("lotes_dia").delete().eq("part_id", part_id).eq("source", "ia"),
-      admin.from("palets_dia").delete().eq("part_id", part_id).eq("source", "ia"),
-      admin.from("producto_dia").delete().eq("part_id", part_id).eq("source", "ia"),
-      admin.from("calibres_dia").delete().eq("part_id", part_id).eq("source", "ia"),
-    ]);
+    const hasIaData = Object.keys(aiData).length > 0 && (Array.isArray(aiData.produccion) || Array.isArray(aiData.gstock) || Array.isArray(aiData.lotes_detalle) || Array.isArray(aiData.palets_detalle) || Array.isArray(aiData.producto_detalle) || Array.isArray(aiData.calibres_detalle)) && (aiData.produccion?.length || aiData.gstock?.length || aiData.lotes_detalle?.length || aiData.palets_detalle?.length || aiData.producto_detalle?.length || aiData.calibres_detalle?.length);
+    
+    // ── Limpiar tablas de detalle previas (solo si hay datos IA nuevos) ───
+    if (hasIaData) {
+      await Promise.all([
+        admin.from("production_runs").delete().eq("part_id", part_id).eq("source", "ia"),
+        admin.from("gstock_entries").delete().eq("part_id", part_id).eq("source", "ia"),
+        admin.from("lotes_dia").delete().eq("part_id", part_id).eq("source", "ia"),
+        admin.from("palets_dia").delete().eq("part_id", part_id).eq("source", "ia"),
+        admin.from("producto_dia").delete().eq("part_id", part_id).eq("source", "ia"),
+        admin.from("calibres_dia").delete().eq("part_id", part_id).eq("source", "ia"),
+      ]);
+    }
+    console.log("[CLEAN] hasIaData=" + hasIaData + " aiKeys=" + Object.keys(aiData).join(","));
 
     const uid = userData.user.id;
 
