@@ -203,6 +203,17 @@ export default function PartDetail() {
         : error.message;
       return toast({ title: "Error analizando", description: detail, variant: "destructive" });
     }
+    // Actualizar parte directamente desde la respuesta IA
+    if (data?.server_side) {
+      setParte((prev) => prev ? {
+        ...prev,
+        kg_produccion_calibrador: Number(data.server_side.kg_produccion_calibrador) || prev.kg_produccion_calibrador,
+        kg_mujeres_calibrador:    Number(data.server_side.kg_mujeres_calibrador) || prev.kg_mujeres_calibrador,
+        kg_palets_brutos:         Number(data.server_side.kg_palets_brutos) || prev.kg_palets_brutos,
+        kg_podrido_calibrador_auto: Number(data.server_side.kg_podrido_calibrador_auto) || prev.kg_podrido_calibrador_auto,
+        estado: "Analizado",
+      } : prev);
+    }
     toast({
       title: data?.ai_warning ? "Análisis parcial" : "Análisis completado",
       description: data?.message ?? "Datos extraídos y cascada actualizada",
