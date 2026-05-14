@@ -85,6 +85,8 @@ Deno.serve(async (req) => {
 
     const server: Record<string, number> = {};
     const csvContexts: { name: string; kind: string; csv: string }[] = [];
+    let serverLotes: any[] = [];
+    let serverPalets: any[] = [];
 
     for (const f of files) {
       if (!f.file_path) continue;
@@ -109,6 +111,8 @@ Deno.serve(async (req) => {
         if (kind === "gstock" || kind === "palets") {
           const v = extractNetos(rowsAll);
           if (v > 0 && (kind === "gstock" || !server.kg_palets_brutos)) server.kg_palets_brutos = v;
+          const palets = extractPaletsDetalle(rowsAll);
+          if (palets.length > 0) serverPalets = palets;
         } else if (kind === "tamanos") {
           const { mujeres, podrido } = extractTamanos(rowsAll);
           if (mujeres > 0) server.kg_mujeres_calibrador = mujeres;
@@ -116,6 +120,8 @@ Deno.serve(async (req) => {
         } else if (kind === "produccion") {
           const v = extractProduccionTotal(rowsAll);
           if (v > 0) server.kg_produccion_calibrador = v;
+          const lotes = extractLotesDetalle(rowsAll);
+          if (lotes.length > 0) serverLotes = lotes;
         }
 
         const csv = rowsAll.map((r) => r.map((c) => (c == null ? "" : String(c))).join(",")).join("\n").slice(0, 1500);
@@ -326,7 +332,30 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
     }
     console.log("[UPDATE] Update object (COMPLETO):", JSON.stringify(update));
     console.log("[UPDATE] fields que se actualizarán:", Object.keys(update).join(","));
-    update.resumen_ia = { ...aiData, _server_side: server, _ai_warning: aiWarning };
+    
+    // Construir resumen_ia: priorizar datos IA, si no hay usar server-side detallado
+    const hasAiContent = Object.keys(aiData).length > 1; // más de 1 key = datos reales
+    if (hasAiContent) {
+      update.resumen_ia = { ...aiData, _server_side: server, _ai_warning: aiWarning };
+    } else {
+      // Usar datos extraídos del Excel directamente
+      const fallbackIa: any = {
+        kg_produccion_total: server.kg_produccion_calibrador || 0,
+        kg_mujeres_l: server.kg_mujeres_calibrador || 0,
+        kg_podrido_calibrador: server.kg_podrido_calibrador_auto || 0,
+        kg_palets_alta: server.kg_palets_brutos || 0,
+        _server_side: server,
+        _ai_warning: aiWarning || "Sin IA, datos extraídos de archivos",
+        produccion: [],
+        gstock: [],
+        lotes_detalle: serverLotes,
+        palets_detalle: serverPalets,
+        producto_detalle: [],
+        calibres_detalle: [],
+      };
+      update.resumen_ia = fallbackIa;
+    }
+    console.log("[IA] hasAiContent=" + hasAiContent + " serverLotes=" + serverLotes.length + " serverPalets=" + serverPalets.length);
     update.estado = "Analizado";
 
     const { error: upErr } = await admin.from("partes_diarios").update(update).eq("id", part_id);
@@ -625,4 +654,85 @@ function extractProduccionTotal(rows: any[][]): number {
   let last = 0;
   for (let i = peso.headerIdx + 1; i < rows.length; i++) { const v = toNum(rows[i]?.[peso.colIdx]); if (v > 0) last = v; }
   return last;
+}
+
+function extractLotesDetalle(rows: any[][]): any[] {
+  // Buscar columnas en las primeras 50 filas
+  let pesoCol = -1, prodCol = -1, loteCol = -1, tphCol = -1, variedadCol = -1;
+  for (let i = 0; i < Math.min(rows.length, 50); i++) {
+    const r = rows[i] ?? [];
+    for (let j = 0; j < r.length; j++) {
+      const c = norm(r[j]);
+      if (c === "peso(kg)" || c === "peso (kg)" || c === "peso kg" || c === "peso") pesoCol = j;
+      if (c === "nombre" || c === "productor") prodCol = j;
+      if (c === "id" || c === "lote" || c === "código" || c === "codigo" || c === "lote_codigo") loteCol = j;
+      if (c === "t/h" || c === "th" || c === "toneladas_hora") tphCol = j;
+      if (c === "variedad" || c === "producto") variedadCol = j;
+    }
+  }
+  if (pesoCol < 0) return [];
+  
+  const lotes: any[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i] ?? [];
+    if (isTotal(r)) continue;
+    const kg = toNum(r[pesoCol]);
+    if (kg <= 0) continue;
+    
+    // Si no encontramos columnas de texto, usar primera celda como productor
+    const productor = prodCol >= 0 ? String(r[prodCol] ?? "").trim() : "";
+    const lote = loteCol >= 0 ? String(r[loteCol] ?? "").trim() : "";
+    const variedad = variedadCol >= 0 ? String(r[variedadCol] ?? "").trim() : "";
+    
+    // Si no hay columnas nombradas, usar primera columna como lote/productor y segunda como variedad
+    const fallbackLote = lote || (r[0] != null ? String(r[0]).trim() : "");
+    const fallbackProductor = productor || (r[1] != null ? String(r[1]).trim() : "");
+    const fallbackVariedad = variedad || (r[2] != null ? String(r[2]).trim() : "");
+    
+    lotes.push({
+      lote_codigo: fallbackLote || null,
+      productor: fallbackProductor || "—",
+      producto: fallbackVariedad || "—",
+      kg_peso_total: kg,
+      toneladas_hora: tphCol >= 0 ? (toNum(r[tphCol]) || null) : null,
+      duracion_min: null,
+      peso_fruta_promedio_g: null,
+      hora_inicio: null,
+    });
+  }
+  return lotes;
+}
+
+function extractPaletsDetalle(rows: any[][]): any[] {
+  let netoCol = -1, clienteCol = -1, paletCol = -1, productoCol = -1;
+  for (let i = 0; i < Math.min(rows.length, 50); i++) {
+    const r = rows[i] ?? [];
+    for (let j = 0; j < r.length; j++) {
+      const c = norm(r[j]);
+      if (c === "netos" || c === "neto" || c === "kg netos" || c === "peso neto" || c === "kgnetos" || c === "peso") netoCol = j;
+      if (c === "cliente") clienteCol = j;
+      if (c === "palet" || c === "id" || c === "palet_id") paletCol = j;
+      if (c === "producto" || c === "variedad") productoCol = j;
+    }
+  }
+  if (netoCol < 0) return [];
+  
+  const palets: any[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i] ?? [];
+    if (isTotal(r)) continue;
+    const kg = toNum(r[netoCol]);
+    if (kg <= 0) continue;
+    
+    palets.push({
+      palet_id: paletCol >= 0 ? String(r[paletCol] ?? "").trim() : null,
+      producto: productoCol >= 0 ? String(r[productoCol] ?? "").trim() : null,
+      cliente: clienteCol >= 0 ? String(r[clienteCol] ?? "").trim() : null,
+      destino: null,
+      kg_neto: kg,
+      situacion: null,
+      n_cajas: null,
+    });
+  }
+  return palets;
 }
