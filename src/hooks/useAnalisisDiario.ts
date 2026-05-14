@@ -133,9 +133,11 @@ export function useAnalisisDiario(desde: string, hasta: string) {
 
       for (const parte of partes ?? []) {
         const ia = parte.resumen_ia as any;
+        const hasIaData = ia && (Array.isArray(ia.lotes_detalle) || Array.isArray(ia.palets_detalle) || Array.isArray(ia.producto_detalle));
         
-        // Fallback: si no hay resumen_ia pero el parte tiene datos server-side
-        if (!parte.resumen_ia) {
+        // Fallback: si no hay datos IA, usar datos server-side del parte
+        if (!hasIaData) {
+          const kgProd = Number((parte as any).kg_produccion_calibrador) || 0;
           const kgProd = Number((parte as any).kg_produccion_calibrador) || 0;
           const kgPalets = Number((parte as any).kg_palets_brutos) || 0;
           if (kgProd > 0 || kgPalets > 0) {
