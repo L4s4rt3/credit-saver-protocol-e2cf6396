@@ -549,17 +549,20 @@ function extractNetos(rows: any[][]): number {
   
   let sum = 0;
   let count = 0;
+  let sampleValues: string[] = [];
   for (let i = hit.headerIdx + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
     if (isTotal(r)) continue;
-    const v = toNum(r[hit.colIdx]);
+    const raw = r[hit.colIdx];
+    const v = toNum(raw);
+    if (sampleValues.length < 5) sampleValues.push(String(raw ?? "") + "->" + v);
     if (v > 0) {
       sum += v;
       count++;
     }
   }
   
-  console.log("[EXTRACT] NETOS: suma=" + sum + " (de " + count + " filas)");
+  console.log("[EXTRACT] NETOS: suma=" + sum + " (de " + count + " filas), muestras: " + sampleValues.join(", "));
   return sum;
 }
 
@@ -569,6 +572,8 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
   let inMuj = false;
   let pesoCol = -1;
   let vals: number[] = [];
+  let foundMujeres = false;
+  let foundPodrido = false;
 
   const flush = () => {
     if (vals.length > 1) {
@@ -587,6 +592,7 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
 
     if (rv.some((v: string) => v === "mujeres")) {
       if (inMuj) flush();
+      foundMujeres = true;
       inMuj = true; pesoCol = -1; vals = [];
       continue;
     }
@@ -599,9 +605,15 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       continue;
     }
     if (inMuj && pesoCol >= 0) { const v = toNum(r[pesoCol]); if (v > 0) vals.push(v); }
-    if (rv.some((v: string) => v === "podrido") && pesoCol >= 0) { const kg = toNum(r[pesoCol]); if (kg > 0) podrido = kg; }
+    if (rv.some((v: string) => v === "podrido") && pesoCol >= 0) {
+      foundPodrido = true;
+      const kg = toNum(r[pesoCol]);
+      if (kg > 0) podrido = kg;
+    }
   }
   if (inMuj) flush();
+  
+  console.log("[TAMANOS] encontroMujeres=" + foundMujeres + " inMuj=" + inMuj + " pesoCol=" + pesoCol + " encontroPodrido=" + foundPodrido + " -> mujeres=" + mujeres + " podrido=" + podrido);
   return { mujeres, podrido };
 }
 
