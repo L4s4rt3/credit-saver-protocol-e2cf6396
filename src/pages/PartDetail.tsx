@@ -209,7 +209,9 @@ export default function PartDetail() {
       return toast({ title: "Error", description: String(e), variant: "destructive" });
     }
     setAnalyzing(false);
-    window.location.reload();
+    // Recargar datos en lugar de hacer reload de toda la página
+    await load();
+    toast({ title: "Análisis completado", description: "Los datos han sido actualizados en la cascada" });
   }
 
   if (!parte || !cascade) {
