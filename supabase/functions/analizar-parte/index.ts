@@ -129,66 +129,7 @@ Deno.serve(async (req) => {
       } catch (e) { console.warn("xlsx parse fail", f.file_name, e); }
     }
 
-    // ── PROMPT OPTIMIZADO ─────────────────────────────────────────────────
-    const jsonTemplate = '{"kg_produccion_total":0,"kg_mujeres_l":0,"kg_podrido_calibrador":0,"kg_palets_alta":0,"industria_manual":0,"reciclado_z1":0,"reciclado_z2":0,"kg_palets_brutos":0,"inventario_dia_anterior":0,"inventario_final":0,"kg_podrido_manual":0,"produccion_real":0,"palets_ajustados":0,"dif_bruta":0,"mermas_totales":0,"djpmn":0,"pct_djpmn":0,"produccion":[],"gstock":[],"lotes_detalle":[],"palets_detalle":[],"producto_detalle":[],"calibres_detalle":[],"analisis":"","fuentes":{}}';
-
-    const sysPrompt = `Analista planta citrica Lasarte SAT. Extrae datos de Excel adjuntos y devuelve JSON.
-
-REGLAS: Solo datos explicitos. Priorizar fila TOTAL. Si no existe, ultimo valor valido de columna peso. Cantidades en kg. No redondear hasta el final. Dato inexistente=0.
-
-EXTRACCION:
-- PRODUCCION (*produccion*.xlsx): kg_produccion_total = "Peso kg" fila TOTAL o ultimo valor.
-- TAMANOS (*tamanos*.xlsx): kg_mujeres_l = suma "Peso kg" donde clase="L" o seccion="Mujeres".
-- PRODUCTO (*producto*.xlsx): kg_podrido_calibrador = "Peso kg" fila Producto="PODRIDO" (excluir MUESTRA/PREC).
-- PALETS (palets*.xlsx/GSTOCK*.xlsx): kg_palets_alta = suma "Netos"/"Peso" >0, excluir totales.
-
-CASCADA:
-produccion_real = kg_produccion_total + industria_manual - kg_mujeres_l - reciclado_z1 - reciclado_z2
-palets_ajustados = kg_palets_brutos - inventario_dia_anterior
-dif_bruta = produccion_real - palets_ajustados - inventario_final
-mermas_totales = kg_podrido_calibrador + kg_podrido_manual
-djpmn = dif_bruta - mermas_totales
-pct_djpmn = djpmn/produccion_real*100 (2 dec, 0 si prod=0)
-
-Responde SOLO con JSON valido usando esta estructura (rellena valores): ${jsonTemplate}
-
-ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
-
-- produccion: array de {product, sizerange, kgproduced, destination}
-- gstock: array de {product, sizerange, kgexpected}
-
-- lotes_detalle: array de objetos por cada lote del informe produccion:
-  {lote_codigo, productor, producto, kg_peso_total, toneladas_hora, duracion_min, peso_fruta_promedio_g, hora_inicio}
-  Buscar columnas: ID/Lote, Nombre/Productor, Variedad/Producto, Peso(kg), T/h, Duracion(min), PesoFruta(g), HoraInicio/Tiempo.
-
-- palets_detalle: array de objetos por cada palet del informe palets/gstock:
-  {palet_id, producto, cliente, destino, kg_neto, situacion, n_cajas}
-  Buscar columnas: Palet/ID, Producto/Variedad, Cliente, Destino/Camara, Netos/Peso, Situacion, Cajas.
-
-- producto_detalle: array de objetos por cada linea del informe producto/tamanos:
-  {linea, producto, formato_caja, kg, n_cajas, grupo_destino}
-  Buscar columnas: Linea, Producto/Variedad, Formato/Caja, Peso(kg), Cajas, Destino/Grupo(Exportacion/Mercado/Industria).
-
-- calibres_detalle: array de objetos por cada calibre del informe tamanos:
-  {calibre, clase, kg, piezas, pct, grupo_destino}
-  Buscar columnas: Calibre/Tamano, Clase(Exportacion/Mercado/Industria), Peso(kg), Piezas/Unidades, %(porcentaje), Destino.
-
-- analisis: string con breve resumen
-- fuentes: objeto con origen de cada dato (nombre archivo o null)`;
-
-    // ── Mensaje de usuario ────────────────────────────────────────────────
-    const dateStr = parte.date ?? "desconocida";
-    let userMsg = `Parte ${dateStr}. Archivos:\n${csvContexts.map(c => "- " + c.name).join("\n")}\n`;
-    for (const c of csvContexts) userMsg += "\n--- [" + c.kind + "] " + c.name + " ---\n" + c.csv;
-    const finalUserMsg = userMsg.slice(0, 8000);
-
-    // ── Llamada IA con fallback DeepSeek -> NVIDIA ────────────────────────
-    let aiData: any = {};
-    let aiWarning: string | null = null;
-    let lastStatus = 0;
-    let lastBody = "";
-    let succeeded = false;
-
+    // ── Proveedores IA (compartido entre subagentes) ──────────────────────
     const providers = [
       ...(NVIDIA_API_KEY ? [{ name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1/chat/completions", key: NVIDIA_API_KEY, model: "meta/llama-3.3-70b-instruct", jsonMode: true }] : []),
       ...(GEMINI_API_KEY ? [{ name: "Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: GEMINI_API_KEY, model: "gemini-2.0-flash", jsonMode: false }] : []),
@@ -198,82 +139,127 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
     ];
     const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
-    outer: for (const provider of providers) {
-      const timeoutMs = 25000;
-      const maxAttempts = 2;
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-          console.log("[IA] " + provider.name + " modelo=" + provider.model + " intento=" + (attempt + 1));
-          const reqBody: any = {
-            model: provider.model,
-            messages: [{ role: "system", content: sysPrompt }, { role: "user", content: finalUserMsg }],
-            temperature: 0.1,
-            max_tokens: 4096,
-          };
-          if (provider.jsonMode) reqBody.response_format = { type: "json_object" };
-          const aiResp = await fetch(provider.url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + provider.key },
-            signal: controller.signal,
-            body: JSON.stringify(reqBody),
-          });
-          clearTimeout(timeout);
-            if (aiResp.ok) {
-            const aiJson = await aiResp.json();
-            let text = aiJson?.choices?.[0]?.message?.content ?? "{}";
-            console.log("[IA] raw response (first 300 chars):", text.slice(0, 300));
-            text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-            try {
-              aiData = JSON.parse(text);
-              succeeded = true;
-              console.log("[IA] JSON parseado correctamente");
-            } catch {
-              // Si falla, buscar un objeto JSON dentro del texto
-              const m = text.match(/\{[\s\S]*\}/);
-              if (m) {
-                try {
-                  aiData = JSON.parse(m[0]);
-                  succeeded = true;
-                  console.log("[IA] JSON encontrado dentro de texto (markdown removido)");
-                } catch (innerErr) {
-                  console.warn("[IA] Error parseando JSON extraído:", innerErr);
-                  aiWarning = provider.name + ": JSON en posición incorrecta";
-                  aiData = {};
-                  succeeded = true;
-                }
-              } else {
-                console.warn("[IA] No se encontró JSON válido en respuesta. Texto (primeros 200):", text.slice(0, 200));
-                aiWarning = provider.name + ": JSON invalido (len=" + text.length + ")";
-                aiData = {};
-                succeeded = true;
-              }
-            }
-            aiWarning = null; // limpiar warning de proveedores anteriores
-            console.log("[IA] " + provider.name + " OK, keys:", Object.keys(aiData).join(","));
-            break outer;
-          }
-          lastStatus = aiResp.status;
-          lastBody = await aiResp.text();
-          console.warn("[IA] " + provider.name + " intento " + (attempt + 1) + " -> " + aiResp.status + " body(100):", lastBody.slice(0, 100));
-          if (aiResp.status === 401 || aiResp.status === 403) { aiWarning = provider.name + " auth failed (" + aiResp.status + ")"; break; }
-          if (aiResp.status === 429) { aiWarning = provider.name + " rate limited (" + aiResp.status + ")"; break; }
-          if (!RETRYABLE.has(aiResp.status)) { aiWarning = provider.name + " " + aiResp.status; break; }
-          await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt) + Math.floor(Math.random() * 300)));
-        } catch (e) {
-          clearTimeout(timeout);
-          lastBody = e instanceof Error ? e.message : "error";
-          const isTimeout = e instanceof Error && e.name === "AbortError";
-          console.warn("[IA] " + provider.name + " intento " + (attempt + 1) + " error: " + lastBody + (isTimeout ? " (TIMEOUT)" : ""));
-          if (isTimeout) { aiWarning = provider.name + " timeout"; break; }
-          await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
-        }
-      }
-      console.warn("[IA] " + provider.name + " agotado, siguiente proveedor...");
+    // ── SUBAGENTES IA ─────────────────────────────────────────────────────
+    // Cada tipo de archivo tiene su propio subagente con prompt especializado
+    const dateStr = parte.date ?? "desconocida";
+
+    // Agrupar CSVs por tipo
+    const grouped: Record<string, { name: string; kind: string; csv: string }[]> = {};
+    for (const ctx of csvContexts) {
+      if (!grouped[ctx.kind]) grouped[ctx.kind] = [];
+      grouped[ctx.kind].push(ctx);
     }
-    if (!succeeded && !aiWarning) {
-      aiWarning = lastStatus === 429 ? "Rate limit" : lastStatus === 0 ? "Timeout" : "Error " + lastStatus;
+
+    interface SubAgentResult {
+      kind: string;
+      data: Record<string, any>;
+      warning: string | null;
+      success: boolean;
+    }
+
+    const agents = [
+      {
+        kind: "palets",
+        label: "Palets / GSTOCK",
+        files: [...(grouped["palets"] ?? []), ...(grouped["gstock"] ?? [])],
+        jsonTemplate: '{"kg_palets_alta":0,"palets_detalle":[],"gstock":[]}',
+        prompt: `Extrae el total de kg y el detalle de cada palet del archivo PALETS/GSTOCK.
+Campos a extraer:
+- kg_palets_alta: suma de "Netos"/"Peso" >0, excluir filas TOTAL.
+- palets_detalle: array de objetos por cada palet:
+  {palet_id: string|null, producto: string|null, cliente: string|null, destino: string|null, kg_neto: number, situacion: string|null, n_cajas: number|null}
+  Buscar columnas: Palet/ID, Producto/Variedad, Cliente, Destino/Camara, Netos/Peso, Situacion, Cajas.
+- gstock: array de {product: string|null, sizerange: string|null, kgexpected: number}
+  Buscar columnas: Producto, Calibre/Tamano, Kg esperados.
+
+Responde SOLO con JSON usando la estructura: ${'{"kg_palets_alta":0,"palets_detalle":[],"gstock":[]}'}`,
+        fallback: () => ({ kg_palets_alta: server.kg_palets_brutos || 0, palets_detalle: serverPalets, gstock: [] }),
+      },
+      {
+        kind: "produccion",
+        label: "Producción",
+        files: grouped["produccion"] ?? [],
+        jsonTemplate: '{"kg_produccion_total":0,"lotes_detalle":[],"produccion":[]}',
+        prompt: `Extrae el total de kg y el detalle de cada lote del archivo PRODUCCION.
+Campos a extraer:
+- kg_produccion_total: "Peso kg" de la fila TOTAL, o el ultimo valor valido.
+- lotes_detalle: array de objetos por cada lote:
+  {lote_codigo: string|null, productor: string|null, producto: string|null, kg_peso_total: number, toneladas_hora: number|null, duracion_min: number|null, peso_fruta_promedio_g: number|null, hora_inicio: string|null}
+  Buscar columnas: ID/Lote, Nombre/Productor, Variedad/Producto, Peso(kg), T/h, Duracion(min), PesoFruta(g), HoraInicio/Tiempo.
+- produccion: array de {product: string|null, sizerange: string|null, kgproduced: number, destination: string|null}
+
+Responde SOLO con JSON usando la estructura: ${'{"kg_produccion_total":0,"lotes_detalle":[],"produccion":[]}'}`,
+        fallback: () => ({ kg_produccion_total: server.kg_produccion_calibrador || 0, lotes_detalle: serverLotes, produccion: [] }),
+      },
+      {
+        kind: "tamanos",
+        label: "Tamaños / Producto",
+        files: grouped["tamanos"] ?? [],
+        jsonTemplate: '{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"producto_detalle":[],"calibres_detalle":[]}',
+        prompt: `Extrae datos del archivo TAMANOS / PRODUCTO (calibres, clasificacion, producto empacado).
+Campos a extraer:
+- kg_mujeres_l: suma de "Peso kg" donde clase="L" o seccion="Mujeres".
+- kg_podrido_calibrador: "Peso kg" de la fila Producto="PODRIDO" (excluir MUESTRA/PREC).
+- calibres_detalle: array de objetos por cada calibre:
+  {calibre: string, clase: string|null, kg: number, piezas: number, pct: number, grupo_destino: string|null}
+  Buscar columnas: Calibre/Tamano, Clase(Exportacion/Mercado/Industria), Peso(kg), Piezas/Unidades, %(porcentaje), Destino.
+- producto_detalle: array de objetos por cada linea de producto empacado:
+  {linea: string|null, producto: string|null, formato_caja: string|null, kg: number, n_cajas: number|null, grupo_destino: string|null}
+  Buscar columnas: Linea, Producto/Variedad, Formato/Caja, Peso(kg), Cajas, Destino/Grupo.
+
+Responde SOLO con JSON usando la estructura: ${'{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"calibres_detalle":[],"producto_detalle":[]}'}`,
+        fallback: () => ({
+          kg_mujeres_l: server.kg_mujeres_calibrador || 0,
+          kg_podrido_calibrador: server.kg_podrido_calibrador_auto || 0,
+          calibres_detalle: [],
+          producto_detalle: [],
+        }),
+      },
+    ];
+
+    // ── Procesar cada subagente ───────────────────────────────────────────
+    let aiData: any = {};
+    let aiWarning: string | null = null;
+    let subagentSuccessCount = 0;
+    const subagentErrors: string[] = [];
+
+    for (const agent of agents) {
+      if (agent.files.length === 0) {
+        // Sin archivos de este tipo, usar fallback server-side
+        Object.assign(aiData, agent.fallback());
+        console.log("[SUBAGENT] " + agent.kind + ": sin archivos, fallback server-side");
+        continue;
+      }
+
+      // Construir mensaje de usuario solo con CSVs de este tipo
+      let userMsg = `Parte ${dateStr}. Archivos ${agent.label}:\n`;
+      for (const c of agent.files) userMsg += "- " + c.name + "\n";
+      for (const c of agent.files) userMsg += "\n--- [" + c.kind + "] " + c.name + " ---\n" + c.csv;
+      const finalUserMsg = userMsg.slice(0, 8000);
+
+      // Llamar IA para este subagente
+      const result = await callAIForSubagent(
+        agent.label, agent.prompt, finalUserMsg,
+        providers, RETRYABLE,
+      );
+
+      if (result.success) {
+        Object.assign(aiData, result.data);
+        subagentSuccessCount++;
+        console.log("[SUBAGENT] " + agent.kind + " OK, keys:", Object.keys(result.data).join(","));
+      } else {
+        // Fallback server-side para este subagente
+        const fb = agent.fallback();
+        Object.assign(aiData, fb);
+        if (result.warning) subagentErrors.push(agent.kind + ": " + result.warning);
+        console.log("[SUBAGENT] " + agent.kind + " fallback server-side, warning:", result.warning);
+      }
+    }
+
+    if (subagentSuccessCount === 0 && subagentErrors.length > 0) {
+      aiWarning = subagentErrors.join("; ");
+    } else if (subagentErrors.length > 0) {
+      aiWarning = "Algunos subagentes usaron fallback: " + subagentErrors.join("; ");
     }
 
     // ── Mapeo IA -> DB ────────────────────────────────────────────────────
@@ -339,29 +325,12 @@ ARRAYS DETALLADOS (extraer TODAS las filas, no solo totales):
       .reduce((s: number, p: any) => s + (Number(p.kg_neto) || 0), 0);
     if (kgEgipto > 0) update.kg_palets_egipto = kgEgipto;
     
-    // Construir resumen_ia: priorizar datos IA, si no hay usar server-side detallado
-    const hasAiContent = Object.keys(aiData).length > 1; // más de 1 key = datos reales
-    if (hasAiContent) {
-      update.resumen_ia = { ...aiData, _server_side: server, _ai_warning: aiWarning };
-    } else {
-      // Usar datos extraídos del Excel directamente
-      const fallbackIa: any = {
-        kg_produccion_total: server.kg_produccion_calibrador || 0,
-        kg_mujeres_l: server.kg_mujeres_calibrador || 0,
-        kg_podrido_calibrador: server.kg_podrido_calibrador_auto || 0,
-        kg_palets_alta: server.kg_palets_brutos || 0,
-        _server_side: server,
-        _ai_warning: aiWarning || "Sin IA, datos extraídos de archivos",
-        produccion: [],
-        gstock: [],
-        lotes_detalle: serverLotes,
-        palets_detalle: serverPalets,
-        producto_detalle: [],
-        calibres_detalle: [],
-      };
-      update.resumen_ia = fallbackIa;
+    // Construir resumen_ia: aiData (con fallbacks) + metadata server-side
+    update.resumen_ia = { ...aiData, _server_side: server, _ai_warning: aiWarning };
+    for (const arr of ["produccion","gstock","lotes_detalle","palets_detalle","producto_detalle","calibres_detalle"]) {
+      if (!Array.isArray(update.resumen_ia[arr])) update.resumen_ia[arr] = [];
     }
-    console.log("[IA] hasAiContent=" + hasAiContent + " serverLotes=" + serverLotes.length + " serverPalets=" + serverPalets.length);
+    console.log("[IA] resumen_ia keys:", Object.keys(update.resumen_ia).join(","), " serverLotes=" + serverLotes.length + " serverPalets=" + serverPalets.length);
     update.estado = "Analizado";
 
     const { error: upErr } = await admin.from("partes_diarios").update(update).eq("id", part_id);
@@ -744,4 +713,82 @@ function extractPaletsDetalle(rows: any[][]): any[] {
     });
   }
   return palets;
+}
+
+// ─── Helper: llamar IA para un subagente específico ──────────────────────────
+async function callAIForSubagent(
+  label: string,
+  sysPrompt: string,
+  userMsg: string,
+  providers: any[],
+  RETRYABLE: Set<number>,
+): Promise<{ data: any; warning: string | null; success: boolean }> {
+  for (const provider of providers) {
+    const timeoutMs = 25000;
+    const maxAttempts = 2;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        console.log("[IA-" + label + "] " + provider.name + " intento=" + (attempt + 1));
+        const reqBody: any = {
+          model: provider.model,
+          messages: [{ role: "system", content: sysPrompt }, { role: "user", content: userMsg }],
+          temperature: 0.1,
+          max_tokens: 4096,
+        };
+        if (provider.jsonMode) reqBody.response_format = { type: "json_object" };
+        const aiResp = await fetch(provider.url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + provider.key },
+          signal: controller.signal,
+          body: JSON.stringify(reqBody),
+        });
+        clearTimeout(timeout);
+        if (aiResp.ok) {
+          const aiJson = await aiResp.json();
+          let text = aiJson?.choices?.[0]?.message?.content ?? "{}";
+          console.log("[IA-" + label + "] raw (first 300):", text.slice(0, 300));
+          text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+          try {
+            const data = JSON.parse(text);
+            console.log("[IA-" + label + "] " + provider.name + " OK");
+            return { data, warning: null, success: true };
+          } catch {
+            const m = text.match(/\{[\s\S]*\}/);
+            if (m) {
+              try {
+                const data = JSON.parse(m[0]);
+                console.log("[IA-" + label + "] JSON extraído de texto");
+                return { data, warning: null, success: true };
+              } catch {
+                return { data: {}, warning: provider.name + ": JSON invalido", success: false };
+              }
+            }
+            return { data: {}, warning: provider.name + ": JSON invalido (sin objeto)", success: false };
+          }
+        }
+        if (aiResp.status === 401 || aiResp.status === 403) {
+          console.warn("[IA-" + label + "] " + provider.name + " auth failed");
+          break;
+        }
+        if (aiResp.status === 429) {
+          console.warn("[IA-" + label + "] " + provider.name + " rate limited");
+          break;
+        }
+        if (!RETRYABLE.has(aiResp.status)) {
+          console.warn("[IA-" + label + "] " + provider.name + " status=" + aiResp.status);
+          break;
+        }
+        await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt) + Math.floor(Math.random() * 300)));
+      } catch (e) {
+        clearTimeout(timeout);
+        const isTimeout = e instanceof Error && e.name === "AbortError";
+        console.warn("[IA-" + label + "] " + provider.name + " error: " + (isTimeout ? "timeout" : String(e)));
+        if (isTimeout) break;
+        await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+      }
+    }
+  }
+  return { data: {}, warning: "Sin respuesta IA para " + label, success: false };
 }
