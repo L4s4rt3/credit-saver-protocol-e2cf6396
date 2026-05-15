@@ -163,27 +163,39 @@ function parseWorkbook(file: File): Promise<XLSX.WorkBook> {
     const reader = new FileReader();
     reader.onload = async (e) => {
       const raw = new Uint8Array(e.target!.result as ArrayBuffer);
+      let mejorWb: XLSX.WorkBook | null = null;
+      let mejorFilas = 0;
+
+      // 1. Intentar local con reparacion ZIP
       try {
-        // 1. Intentar local con reparacion ZIP
         const repaired = repairXlsx(raw);
         const wb = XLSX.read(repaired, { type: "array" });
-        const totalRows = (wb.SheetNames || []).reduce((s, sn) => {
-          const rows = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[sn], { header: 1 });
-          return s + rows.length;
-        }, 0);
-        if (totalRows > 2) { resolve(wb); return; }
-      } catch (_) { /* fallback a servidor */ }
-      // 2. Fallback a edge function (maneja DEFLATE64 real)
+        const total = contarFilas(wb);
+        if (total > mejorFilas) { mejorWb = wb; mejorFilas = total; }
+      } catch (_) { /* ignorar */ }
+
+      // 2. Intentar edge function (maneja DEFLATE64 real)
       try {
         const wb = await parseWorkbookRemoto(raw, file.name);
-        resolve(wb);
-      } catch (err2) {
-        reject(new Error("No se pudo leer el archivo: " + (err2 instanceof Error ? err2.message : String(err2))));
-      }
+        const total = contarFilas(wb);
+        if (total > mejorFilas) { mejorWb = wb; mejorFilas = total; }
+      } catch (_) { /* ignorar */ }
+
+      if (mejorWb) { resolve(mejorWb); return; }
+      reject(new Error("No se pudo leer el archivo Excel"));
     };
     reader.onerror = () => reject(new Error("Error al leer el archivo"));
     reader.readAsArrayBuffer(file);
   });
+}
+
+function contarFilas(wb: XLSX.WorkBook): number {
+  return (wb.SheetNames || []).reduce((s, sn) => {
+    try {
+      const rows = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[sn], { header: 1 });
+      return s + rows.length;
+    } catch { return s; }
+  }, 0);
 }
 
 async function parseWorkbookRemoto(raw: Uint8Array, fileName: string): Promise<XLSX.WorkBook> {
