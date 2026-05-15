@@ -133,28 +133,13 @@ export function useAnalisisDiario(desde: string, hasta: string) {
 
       for (const parte of partes ?? []) {
         const ia = parte.resumen_ia as any;
-        const hasIaData = ia && (Array.isArray(ia.lotes_detalle) || Array.isArray(ia.palets_detalle) || Array.isArray(ia.producto_detalle));
-        
-        // Fallback: si no hay datos IA, usar datos server-side del parte
-        if (!hasIaData) {
-          const kgProd = Number((parte as any).kg_produccion_calibrador) || 0;
-          const kgPalets = Number((parte as any).kg_palets_brutos) || 0;
-          if (kgProd > 0 || kgPalets > 0) {
-            diasSet.add(parte.date);
-            if (kgProd > 0) {
-              lotesAll.push({
-                fecha: parte.date, lote_codigo: "—", productor: "Del campo",
-                producto: "Producción", kg_peso_total: kgProd,
-                toneladas_hora: null, duracion_min: null, peso_fruta_promedio_g: null,
-              });
-              const key = "Del campo";
-              if (!proveedoresMap.has(key)) proveedoresMap.set(key, { kg: 0, n_lotes: 0, fechas: new Set(), t_hs: [], pesos: [] });
-              const p = proveedoresMap.get(key)!;
-              p.kg += kgProd; p.n_lotes += 1; p.fechas.add(parte.date);
-            }
-          }
-          continue;
-        }
+        const hasLotes = Array.isArray(ia?.lotes_detalle) && ia.lotes_detalle.length > 0;
+        const hasPalets = Array.isArray(ia?.palets_detalle) && ia.palets_detalle.length > 0;
+        const hasProductos = Array.isArray(ia?.producto_detalle) && ia.producto_detalle.length > 0;
+        const hasCalibres = Array.isArray(ia?.calibres_detalle) && ia.calibres_detalle.length > 0;
+        const hasIaData = ia && (hasLotes || hasPalets || hasProductos || hasCalibres);
+
+        if (!hasIaData) continue;
 
         diasSet.add(parte.date);
 
