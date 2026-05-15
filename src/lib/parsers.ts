@@ -174,11 +174,11 @@ function parseWorkbook(file: File): Promise<XLSX.WorkBook> {
         if (total > mejorFilas) { mejorWb = wb; mejorFilas = total; }
       } catch (_) { /* ignorar */ }
 
-      // 2. Intentar edge function (maneja DEFLATE64 real)
+      // 2. Intentar edge function (maneja DEFLATE64 real) — tiene prioridad
       try {
         const wb = await parseWorkbookRemoto(raw, file.name);
         const total = contarFilas(wb);
-        if (total > mejorFilas) { mejorWb = wb; mejorFilas = total; }
+        if (total > 0) { mejorWb = wb; mejorFilas = total; }
       } catch (_) { /* ignorar */ }
 
       if (mejorWb) { resolve(mejorWb); return; }
