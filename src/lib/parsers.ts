@@ -160,32 +160,38 @@ export type ParsedInforme =
 
 function parseWorkbook(file: File): Promise<XLSX.WorkBook> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
+    // Leer como ArrayBuffer para intento local
+    const arrReader = new FileReader();
+    arrReader.onload = async (e) => {
       const raw = new Uint8Array(e.target!.result as ArrayBuffer);
       let mejorWb: XLSX.WorkBook | null = null;
-      let mejorFilas = 0;
-
       // 1. Intentar local con reparacion ZIP
       try {
-        const repaired = repairXlsx(raw);
+        const repaired = repairXlsx(new Uint8Array(raw));
         const wb = XLSX.read(repaired, { type: "array" });
-        const total = contarFilas(wb);
-        if (total > mejorFilas) { mejorWb = wb; mejorFilas = total; }
+        if (contarFilas(wb) > 0) mejorWb = wb;
       } catch (_) { /* ignorar */ }
-
-      // 2. Intentar edge function (maneja DEFLATE64 real) — tiene prioridad
+      // 2. Intentar edge function — leer como DataURL para base64 fiable
       try {
-        const wb = await parseWorkbookRemoto(raw, file.name);
-        const total = contarFilas(wb);
-        if (total > 0) { mejorWb = wb; mejorFilas = total; }
+        const dataUrl = await readFileAsDataURL(file);
+        const b64 = dataUrl.split(",")[1];
+        const wb = await parseWorkbookRemoto(b64, file.name);
+        if (contarFilas(wb) > 0) mejorWb = wb;
       } catch (_) { /* ignorar */ }
-
       if (mejorWb) { resolve(mejorWb); return; }
       reject(new Error("No se pudo leer el archivo Excel"));
     };
-    reader.onerror = () => reject(new Error("Error al leer el archivo"));
-    reader.readAsArrayBuffer(file);
+    arrReader.onerror = () => reject(new Error("Error al leer el archivo"));
+    arrReader.readAsArrayBuffer(file);
+  });
+}
+
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = reject;
+    r.readAsDataURL(file);
   });
 }
 
@@ -198,35 +204,26 @@ function contarFilas(wb: XLSX.WorkBook): number {
   }, 0);
 }
 
-async function parseWorkbookRemoto(raw: Uint8Array, fileName: string): Promise<XLSX.WorkBook> {
+async function parseWorkbookRemoto(dataBase64: string, fileName: string): Promise<XLSX.WorkBook> {
   const env = (typeof import.meta !== "undefined" ? (import.meta as any).env : typeof process !== "undefined" ? process.env : {}) || {};
   const supabaseUrl = env.VITE_SUPABASE_URL || "";
   const anonKey = env.VITE_SUPABASE_ANON_KEY || "";
   if (!supabaseUrl) throw new Error("VITE_SUPABASE_URL no configurada");
-  const b64 = bytesToBase64(raw);
   const resp = await fetch(`${supabaseUrl}/functions/v1/parse-excel`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "apikey": anonKey },
-    body: JSON.stringify({ data_base64: b64 }),
+    body: JSON.stringify({ data_base64: dataBase64 }),
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error((err as any).error || `HTTP ${resp.status}`);
   }
   const result = await resp.json() as { sheet_names: string[]; data: Record<string, any[][]> };
-  // Reconstruir workbook desde los datos 2D
   const sheets: Record<string, XLSX.WorkSheet> = {};
   for (const sn of result.sheet_names) {
-    const rows2d = result.data[sn] ?? [];
-    sheets[sn] = XLSX.utils.aoa_to_sheet(rows2d);
+    sheets[sn] = XLSX.utils.aoa_to_sheet(result.data[sn] ?? []);
   }
   return { SheetNames: result.sheet_names, Sheets: sheets } as XLSX.WorkBook;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin);
 }
 
 /**
