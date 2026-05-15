@@ -1,25 +1,19 @@
-import { Suspense, lazy, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { usePartesDashboard } from "@/hooks/usePartes";
 import { KPICard } from "@/components/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-const ComposedChart = lazy(() => import("recharts").then(m => ({ default: m.ComposedChart })));
-const Line = lazy(() => import("recharts").then(m => ({ default: m.Line })));
-const Bar = lazy(() => import("recharts").then(m => ({ default: m.Bar })));
-const CartesianGrid = lazy(() => import("recharts").then(m => ({ default: m.CartesianGrid })));
-const XAxis = lazy(() => import("recharts").then(m => ({ default: m.XAxis })));
-const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
-const Tooltip = lazy(() => import("recharts").then(m => ({ default: m.Tooltip })));
-const ReferenceLine = lazy(() => import("recharts").then(m => ({ default: m.ReferenceLine })));
-const ResponsiveContainer = lazy(() => import("recharts").then(m => ({ default: m.ResponsiveContainer })));
-const Legend = lazy(() => import("recharts").then(m => ({ default: m.Legend })));
+import {
+  ComposedChart, Line, Bar, CartesianGrid, XAxis, YAxis,
+  Tooltip, ReferenceLine, ResponsiveContainer,
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDate, formatKg, formatPct } from "@/lib/format";
-import { useI18n } from "@/lib/i18n";
+import { formatDate, formatKg } from "@/lib/format";
+
 import {
-  Truck, Package, TrendingDown, Recycle, FileText, Plus,
+  Truck, Package, TrendingDown, Plus,
   AlertTriangle, Gauge, CheckCircle2, AlertCircle, XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -65,7 +59,6 @@ function ChartTooltip({ active, payload, label }: any) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { t } = useI18n();
   const { partes, loading, totals, chartSeries } = usePartesDashboard(30);
 
   // T/h promedio últimos 30 días
@@ -95,7 +88,6 @@ export default function Dashboard() {
   );
 
   return (
-    <Suspense fallback={<div className="max-w-7xl mx-auto space-y-8"><Skeleton className="h-96" /></div>}>
     <div className="max-w-7xl mx-auto space-y-8">
 
       {/* ─── Header con acción principal ─────────────────────────────────── */}
@@ -314,7 +306,6 @@ export default function Dashboard() {
         </CardContent>
       </Card>
     </div>
-    </Suspense>
   );
 }
 
