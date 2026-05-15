@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import { unzipSync, zipSync, type AsyncZipOptions } from "https://esm.sh/fflate@0.8.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -105,8 +106,10 @@ Deno.serve(async (req) => {
       console.log("[CLASSIFY] file=" + (f.file_name ?? "") + " type=" + (f.file_type ?? "") + " kind=" + kind);
 
       try {
-        const repaired = repairXlsx(bytes);
-        const wb = XLSX.read(repaired, { type: "array" });
+        // Primero convertir DEFLATE64 real, luego parchear bytes por si acaso
+        let converted = deflate64ToDeflate(bytes);
+        if (converted === bytes) converted = repairXlsx(bytes);
+        const wb = XLSX.read(converted, { type: "array" });
         const rowsAll: any[][] = [];
         for (const sn of wb.SheetNames) {
           const ws = wb.Sheets[sn];
@@ -489,6 +492,20 @@ JSON: ${'{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"calibres_detalle":[],"prod
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+
+/**
+ * Convierte ZIP con DEFLATE64 (method 9) a DEFLATE (method 8) usando fflate.
+ * fflate soporta descompresion DEFLATE64 real (no solo parcheo de byte).
+ */
+function deflate64ToDeflate(bytes: Uint8Array): Uint8Array {
+  try {
+    const unzipped = unzipSync(bytes);
+    return zipSync(unzipped, { level: 6 });
+  } catch (e) {
+    console.warn("[DEFLATE64] fflate fallo, usando original:", (e as Error).message?.slice(0, 100));
+    return bytes;
+  }
 }
 
 function repairXlsx(bytes: Uint8Array): Uint8Array {

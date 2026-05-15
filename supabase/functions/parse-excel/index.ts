@@ -1,4 +1,5 @@
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import { unzipSync, zipSync } from "https://esm.sh/fflate@0.8.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,9 +14,11 @@ Deno.serve(async (req) => {
       return json({ error: "data_base64 requerido" }, 400);
     }
 
-    const bytes = base64ToBytes(data_base64);
-    const repaired = repairXlsx(bytes);
-    const wb = XLSX.read(repaired, { type: "array" });
+    let bytes = base64ToBytes(data_base64);
+    // Convertir DEFLATE64 real a DEFLATE
+    let converted = deflate64ToDeflate(bytes);
+    if (converted === bytes) converted = repairXlsx(bytes);
+    const wb = XLSX.read(converted, { type: "array" });
 
     const result: Record<string, any[][]> = {};
     for (const sn of wb.SheetNames) {
@@ -32,6 +35,13 @@ Deno.serve(async (req) => {
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+
+function deflate64ToDeflate(bytes: Uint8Array): Uint8Array {
+  try {
+    const unzipped = unzipSync(bytes);
+    return zipSync(unzipped, { level: 6 });
+  } catch { return bytes; }
 }
 
 function repairXlsx(bytes: Uint8Array): Uint8Array {
