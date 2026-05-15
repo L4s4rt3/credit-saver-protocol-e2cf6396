@@ -163,16 +163,17 @@ Deno.serve(async (req) => {
         label: "Palets / GSTOCK",
         files: [...(grouped["palets"] ?? []), ...(grouped["gstock"] ?? [])],
         jsonTemplate: '{"kg_palets_alta":0,"palets_detalle":[],"gstock":[]}',
-        prompt: `Extrae el total de kg y el detalle de cada palet del archivo PALETS/GSTOCK.
-Campos a extraer:
-- kg_palets_alta: suma de "Netos"/"Peso" >0, excluir filas TOTAL.
-- palets_detalle: array de objetos por cada palet:
-  {palet_id: string|null, producto: string|null, cliente: string|null, destino: string|null, kg_neto: number, situacion: string|null, n_cajas: number|null}
-  Buscar columnas: Palet/ID, Producto/Variedad, Cliente, Destino/Camara, Netos/Peso, Situacion, Cajas.
-- gstock: array de {product: string|null, sizerange: string|null, kgexpected: number}
-  Buscar columnas: Producto, Calibre/Tamano, Kg esperados.
+        prompt: `Analista planta citrica Lasarte SAT. Extrae datos de archivo PALETS/GSTOCK.
 
-Responde SOLO con JSON usando la estructura: ${'{"kg_palets_alta":0,"palets_detalle":[],"gstock":[]}'}`,
+REGLAS: Solo datos explicitos. Priorizar fila TOTAL. Cantidades en kg. No redondear. Dato inexistente=0. Sin texto adicional, SOLO JSON.
+
+Campos:
+- kg_palets_alta: suma "Netos"/"Peso" >0, excluir TOTALES.
+- palets_detalle: array de {palet_id, producto, cliente, destino, kg_neto, situacion, n_cajas}
+  Col: Palet/ID, Producto, Cliente, Destino, Netos/Peso, Sit, Cajas.
+- gstock: array de {product, sizerange, kgexpected}
+
+JSON: ${'{"kg_palets_alta":0,"palets_detalle":[],"gstock":[]}'}`,
         fallback: () => ({ kg_palets_alta: server.kg_palets_brutos || 0, palets_detalle: serverPalets, gstock: [] }),
       },
       {
@@ -180,15 +181,17 @@ Responde SOLO con JSON usando la estructura: ${'{"kg_palets_alta":0,"palets_deta
         label: "Producción",
         files: grouped["produccion"] ?? [],
         jsonTemplate: '{"kg_produccion_total":0,"lotes_detalle":[],"produccion":[]}',
-        prompt: `Extrae el total de kg y el detalle de cada lote del archivo PRODUCCION.
-Campos a extraer:
-- kg_produccion_total: "Peso kg" de la fila TOTAL, o el ultimo valor valido.
-- lotes_detalle: array de objetos por cada lote:
-  {lote_codigo: string|null, productor: string|null, producto: string|null, kg_peso_total: number, toneladas_hora: number|null, duracion_min: number|null, peso_fruta_promedio_g: number|null, hora_inicio: string|null}
-  Buscar columnas: ID/Lote, Nombre/Productor, Variedad/Producto, Peso(kg), T/h, Duracion(min), PesoFruta(g), HoraInicio/Tiempo.
-- produccion: array de {product: string|null, sizerange: string|null, kgproduced: number, destination: string|null}
+        prompt: `Analista planta citrica Lasarte SAT. Extrae datos de archivo PRODUCCION.
 
-Responde SOLO con JSON usando la estructura: ${'{"kg_produccion_total":0,"lotes_detalle":[],"produccion":[]}'}`,
+REGLAS: Solo datos explicitos. Priorizar fila TOTAL o ultimo valor. Cantidades en kg. No redondear. Dato inexistente=0. Sin texto adicional, SOLO JSON.
+
+Campos:
+- kg_produccion_total: "Peso kg" fila TOTAL o ultimo valor.
+- lotes_detalle: array de {lote_codigo, productor, producto, kg_peso_total, toneladas_hora, duracion_min, peso_fruta_promedio_g, hora_inicio}
+  Col: ID/Lote, Productor, Variedad, Peso(kg), T/h, Duracion(min), PesoFruta(g), HoraInicio.
+- produccion: array de {product, sizerange, kgproduced, destination}
+
+JSON: ${'{"kg_produccion_total":0,"lotes_detalle":[],"produccion":[]}'}`,
         fallback: () => ({ kg_produccion_total: server.kg_produccion_calibrador || 0, lotes_detalle: serverLotes, produccion: [] }),
       },
       {
@@ -196,18 +199,19 @@ Responde SOLO con JSON usando la estructura: ${'{"kg_produccion_total":0,"lotes_
         label: "Tamaños / Producto",
         files: grouped["tamanos"] ?? [],
         jsonTemplate: '{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"producto_detalle":[],"calibres_detalle":[]}',
-        prompt: `Extrae datos del archivo TAMANOS / PRODUCTO (calibres, clasificacion, producto empacado).
-Campos a extraer:
-- kg_mujeres_l: suma de "Peso kg" donde clase="L" o seccion="Mujeres".
-- kg_podrido_calibrador: "Peso kg" de la fila Producto="PODRIDO" (excluir MUESTRA/PREC).
-- calibres_detalle: array de objetos por cada calibre:
-  {calibre: string, clase: string|null, kg: number, piezas: number, pct: number, grupo_destino: string|null}
-  Buscar columnas: Calibre/Tamano, Clase(Exportacion/Mercado/Industria), Peso(kg), Piezas/Unidades, %(porcentaje), Destino.
-- producto_detalle: array de objetos por cada linea de producto empacado:
-  {linea: string|null, producto: string|null, formato_caja: string|null, kg: number, n_cajas: number|null, grupo_destino: string|null}
-  Buscar columnas: Linea, Producto/Variedad, Formato/Caja, Peso(kg), Cajas, Destino/Grupo.
+        prompt: `Analista planta citrica Lasarte SAT. Extrae datos de archivo TAMANOS / PRODUCTO.
 
-Responde SOLO con JSON usando la estructura: ${'{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"calibres_detalle":[],"producto_detalle":[]}'}`,
+REGLAS: Solo datos explicitos. Cantidades en kg. No redondear. Dato inexistente=0. Sin texto adicional, SOLO JSON.
+
+Campos:
+- kg_mujeres_l: suma "Peso kg" donde clase="L" o seccion="Mujeres".
+- kg_podrido_calibrador: "Peso kg" fila Producto="PODRIDO" (excluir MUESTRA/PREC).
+- calibres_detalle: array de {calibre, clase, kg, piezas, pct, grupo_destino}
+  Col: Calibre, Clase(Exportacion/Mercado), Peso(kg), Piezas, %, Destino.
+- producto_detalle: array de {linea, producto, formato_caja, kg, n_cajas, grupo_destino}
+  Col: Linea, Producto, Formato/Caja, Peso(kg), Cajas, Destino/Grupo.
+
+JSON: ${'{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"calibres_detalle":[],"producto_detalle":[]}'}`,
         fallback: () => ({
           kg_mujeres_l: server.kg_mujeres_calibrador || 0,
           kg_podrido_calibrador: server.kg_podrido_calibrador_auto || 0,
@@ -688,7 +692,7 @@ function extractPaletsDetalle(rows: any[][]): any[] {
       if (c === "netos" || c === "neto" || c === "kg netos" || c === "peso neto" || c === "kgnetos" || c === "peso") netoCol = j;
       if (c === "cliente") clienteCol = j;
       if (c === "palet" || c === "id" || c === "palet_id") paletCol = j;
-      if (c === "producto" || c === "variedad" || c === "denominacion_producto" || c === "denominacion" || c === "denominación") productoCol = j;
+      if (c === "producto" || c === "variedad" || c === "denominacion_producto" || c === "denominacion producto" || c === "denominacion" || c === "denominación") productoCol = j;
     }
   }
   if (netoCol < 0) return [];
