@@ -248,9 +248,18 @@ JSON: ${'{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"calibres_detalle":[],"prod
       );
 
       if (result.success) {
-        Object.assign(aiData, result.data);
+        // Fusionar IA + server-side: server-side tiene prioridad en arrays detallados
+        const merged = { ...result.data };
+        if (agent.kind === "produccion") {
+          if (serverLotes.length > 0) merged.lotes_detalle = serverLotes;
+          if (server.kg_produccion_calibrador) merged.kg_produccion_total = server.kg_produccion_calibrador;
+        } else if (agent.kind === "palets") {
+          if (serverPalets.length > 0) merged.palets_detalle = serverPalets;
+          if (server.kg_palets_brutos) merged.kg_palets_alta = server.kg_palets_brutos;
+        }
+        Object.assign(aiData, merged);
         subagentSuccessCount++;
-        console.log("[SUBAGENT] " + agent.kind + " OK, keys:", Object.keys(result.data).join(","));
+        console.log("[SUBAGENT] " + agent.kind + " OK, keys:", Object.keys(merged).join(","));
       } else {
         // Fallback server-side para este subagente
         const fb = agent.fallback();
