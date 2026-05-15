@@ -206,6 +206,7 @@ async function guardarEnSupabase(
           situacion: p.situacion,
           n_cajas: p.n_cajas,
           egipto: p.es_egipto,
+          campo: p.es_campo,
           source: "manual",
         }))
       )
@@ -214,11 +215,14 @@ async function guardarEnSupabase(
     const kgEgipto = paletsInforme.palets
       .filter(p => p.es_egipto)
       .reduce((s, p) => s + p.kg_neto, 0);
+    const kgCampo = paletsInforme.palets
+      .filter(p => p.es_campo)
+      .reduce((s, p) => s + p.kg_neto, 0);
     const kgTotal = paletsInforme.palets.reduce((s, p) => s + p.kg_neto, 0);
     ops.push(
       (supabase as any)
         .from("partes_diarios")
-        .update({ kg_palets_brutos: kgTotal, kg_palets_egipto: kgEgipto })
+        .update({ kg_palets_brutos: kgTotal, kg_palets_egipto: kgEgipto, kg_palets_campo: kgCampo })
         .eq("id", partId)
     );
   }

@@ -30,6 +30,7 @@ interface Parte {
   kg_mujeres_calibrador: number;
   kg_palets_brutos: number;
   kg_palets_egipto: number;
+  kg_palets_campo: number;
   kg_podrido_calibrador_auto: number;
   kg_inventario_anterior_sin_alta: number;
   notas_generales: string | null;
@@ -128,7 +129,7 @@ export default function PartDetail() {
 
   const cascade = useMemo(() => {
     if (!parte) return null;
-    const paletsCascada = Number(parte.kg_palets_brutos) - Number(parte.kg_palets_egipto);
+    const paletsCascada = Number(parte.kg_palets_brutos) - Number(parte.kg_palets_egipto) - Number(parte.kg_palets_campo);
     return computeCascade({
       kg_produccion_calibrador: Number(parte.kg_produccion_calibrador),
       kg_mujeres_calibrador: Number(parte.kg_mujeres_calibrador),

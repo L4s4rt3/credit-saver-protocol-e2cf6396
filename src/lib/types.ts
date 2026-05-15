@@ -14,6 +14,7 @@ export interface ParteRow {
   kg_mujeres_calibrador: number;
   kg_palets_brutos: number;
   kg_palets_egipto: number;
+  kg_palets_campo: number;
   kg_podrido_calibrador_auto: number;
   kg_inventario_anterior_sin_alta: number;
   notas_generales?: string | null;

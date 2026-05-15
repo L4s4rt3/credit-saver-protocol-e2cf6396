@@ -348,11 +348,15 @@ JSON: ${'{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"calibres_detalle":[],"prod
     console.log("[UPDATE] Update object (COMPLETO):", JSON.stringify(update));
     console.log("[UPDATE] fields que se actualizarán:", Object.keys(update).join(","));
 
-    // Calcular kg_palets_egipto desde los palets extraídos del Excel
+    // Calcular kg_palets_egipto y kg_palets_campo desde serverPalets
     const kgEgipto = (serverPalets as any[])
       .filter((p: any) => p.es_egipto)
       .reduce((s: number, p: any) => s + (Number(p.kg_neto) || 0), 0);
     if (kgEgipto > 0) update.kg_palets_egipto = kgEgipto;
+    const kgCampo = (serverPalets as any[])
+      .filter((p: any) => p.es_campo)
+      .reduce((s: number, p: any) => s + (Number(p.kg_neto) || 0), 0);
+    if (kgCampo > 0) update.kg_palets_campo = kgCampo;
     
     // Construir resumen_ia: aiData (con fallbacks) + metadata server-side
     update.resumen_ia = { ...aiData, _server_side: server, _ai_warning: aiWarning };
@@ -440,6 +444,7 @@ JSON: ${'{"kg_mujeres_l":0,"kg_podrido_calibrador":0,"calibres_detalle":[],"prod
         situacion:  r.situacion ?? null,
         n_cajas:    Number(r.n_cajas) || null,
         egipto:     r.es_egipto === true,
+        campo:      r.es_campo === true,
       }));
       await admin.from("palets_dia").insert(rows);
     }
@@ -768,6 +773,7 @@ function extractPaletsDetalle(rows: any[][]): any[] {
       situacion: null,
       n_cajas: null,
       es_egipto: !!prodName && /EGIPTO/i.test(prodName),
+      es_campo: !!prodName && /CAMPO|DEL CAMPO|CAMPI/i.test(prodName),
     });
   }
   return palets;
