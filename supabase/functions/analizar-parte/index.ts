@@ -76,11 +76,12 @@ Deno.serve(async (req) => {
     const classify = (f: ArchivoRow) => {
       const name = (f.file_name ?? "").toLowerCase();
       const ft = (f.file_type ?? "").toLowerCase();
+      // Primero por NOMBRE (mas preciso)
       if (ft === "gstock" || /g[\s_-]?stock/i.test(name)) return "gstock";
-      if (ft === "produccion" || (/producci[oó]n/i.test(name) && !/producto/i.test(name))) return "produccion";
       if (/tama[ñn]o|clase|calidad|producto|empaque|envase|packing|formato/i.test(name)) return "tamanos";
+      if (/producci[oó]n/i.test(name) && !/producto|tamaño|tamano|clase|calidad|empaque|envase/i.test(name)) return "produccion";
       if (/palet/i.test(name)) return "palets";
-      // Por defecto: si el usuario lo etiqueto como GSTOCK/Produccion, respetar la etiqueta
+      // Fallback por file_type (etiqueta del usuario)
       if (ft === "gstock") return "gstock";
       if (ft === "produccion") return "produccion";
       return "tamanos";
