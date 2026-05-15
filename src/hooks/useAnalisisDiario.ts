@@ -135,7 +135,8 @@ export function useAnalisisDiario(desde: string, hasta: string) {
         const ia = parte.resumen_ia as any;
         const hasLotes = Array.isArray(ia?.lotes_detalle) && ia.lotes_detalle.length > 0;
         const hasPalets = Array.isArray(ia?.palets_detalle) && ia.palets_detalle.length > 0;
-        const hasProductos = Array.isArray(ia?.producto_detalle) && ia.producto_detalle.length > 0;
+        const hasProductos = (Array.isArray(ia?.producto_detalle) && ia.producto_detalle.length > 0) ||
+          (Array.isArray(ia?.palets_detalle) && ia.palets_detalle.some((p: any) => p.producto));
         const hasCalibres = Array.isArray(ia?.calibres_detalle) && ia.calibres_detalle.length > 0;
         const hasIaData = ia && (hasLotes || hasPalets || hasProductos || hasCalibres);
 
@@ -187,19 +188,18 @@ export function useAnalisisDiario(desde: string, hasta: string) {
           }
         }
 
-        // ── Productos ──────────────────────────────────────────────────────
-        if (Array.isArray(ia.producto_detalle)) {
-          for (const prod of ia.producto_detalle) {
-            const pkey = prod.producto ?? "—";
+        // ── Productos (desde denominacion_producto de los palets) ──────────
+        if (Array.isArray(ia.palets_detalle)) {
+          for (const palet of ia.palets_detalle) {
+            if (!palet.producto) continue;
+            const pkey = palet.producto;
             if (!productosMap.has(pkey)) {
               productosMap.set(pkey, { kg: 0, n_lineas: 0, fechas: new Set(), formatos: new Set(), grupo_destino: null });
             }
             const p = productosMap.get(pkey)!;
-            p.kg += Number(prod.kg) || 0;
+            p.kg += Number(palet.kg_neto) || 0;
             p.n_lineas += 1;
             p.fechas.add(parte.date);
-            if (prod.formato_caja) p.formatos.add(String(prod.formato_caja));
-            if (prod.grupo_destino && !p.grupo_destino) p.grupo_destino = String(prod.grupo_destino);
           }
         }
       }
