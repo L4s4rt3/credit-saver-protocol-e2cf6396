@@ -647,16 +647,22 @@ function extractProduccionTotal(rows: any[][]): number {
 
 function extractLotesDetalle(rows: any[][]): any[] {
   // Buscar columnas en las primeras 50 filas
-  let pesoCol = -1, prodCol = -1, loteCol = -1, tphCol = -1, variedadCol = -1;
+  let pesoCol = -1, nombreProdCol = -1, codigoProdCol = -1, loteCol = -1, tphCol = -1, variedadCol = -1;
   for (let i = 0; i < Math.min(rows.length, 50); i++) {
     const r = rows[i] ?? [];
     for (let j = 0; j < r.length; j++) {
       const c = norm(r[j]);
+      const raw = String(r[j] ?? "");
       if (/^peso(k?g)?(\s*\(kg\))?$/.test(c) || c === "peso") pesoCol = j;
-      if (/^(nombre|productor)/.test(c)) prodCol = j;
-      if (/^(id|lote|código|codigo)/.test(c) && !/productor/i.test(r[j] ?? "")) loteCol = j;
+      // "Nombre Productor" o "Nombre del Productor" → nombre
+      if (/nombre/.test(c) && /productor/.test(c)) nombreProdCol = j;
+      // "Código Productor" o "Codigo Productor" → codigo
+      if (/^(codigo|código)/.test(c) && /productor/.test(c)) codigoProdCol = j;
+      // "Productor" solo (sin nombre/codigo) → asumir nombre
+      if (c === "productor") { nombreProdCol = j; }
+      if (/^(id|lote)/.test(c) && !/productor/i.test(raw)) loteCol = j;
       if (/^t\/?h$|^toneladas/.test(c)) tphCol = j;
-      if (/^(variedad|producto)/.test(c) && !/productor/i.test(r[j] ?? "")) variedadCol = j;
+      if (/^(variedad|producto)/.test(c) && !/productor/i.test(raw)) variedadCol = j;
     }
   }
   if (pesoCol < 0) return [];
@@ -668,18 +674,20 @@ function extractLotesDetalle(rows: any[][]): any[] {
     const kg = toNum(r[pesoCol]);
     if (kg <= 0) continue;
     
-    // Si no encontramos columnas de texto, usar primera celda como productor
-    const productor = prodCol >= 0 ? String(r[prodCol] ?? "").trim() : "";
+    const nombreProd = nombreProdCol >= 0 ? String(r[nombreProdCol] ?? "").trim() : "";
+    const codigoProd = codigoProdCol >= 0 ? String(r[codigoProdCol] ?? "").trim() : "";
     const lote = loteCol >= 0 ? String(r[loteCol] ?? "").trim() : "";
     const variedad = variedadCol >= 0 ? String(r[variedadCol] ?? "").trim() : "";
     
-    // Si no hay columnas nombradas, usar primera columna como lote/productor y segunda como variedad
+    // Usar nombre si no es numerico; si no, codigo como fallback
+    const productor = nombreProd || codigoProd || "";
     const fallbackLote = lote || (r[0] != null ? String(r[0]).trim() : "");
     const fallbackProductor = productor || (r[1] != null ? String(r[1]).trim() : "");
     const fallbackVariedad = variedad || (r[2] != null ? String(r[2]).trim() : "");
     
     lotes.push({
       lote_codigo: fallbackLote || null,
+      codigo_productor: codigoProd || null,
       productor: fallbackProductor || "—",
       producto: fallbackVariedad || "—",
       kg_peso_total: kg,
