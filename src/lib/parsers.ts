@@ -163,7 +163,8 @@ function parseWorkbook(file: File): Promise<XLSX.WorkBook> {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer);
+        let data = new Uint8Array(e.target!.result as ArrayBuffer);
+        data = repairXlsx(data);
         const wb = XLSX.read(data, { type: "array", cellDates: true });
         resolve(wb);
       } catch (err) { reject(err); }
@@ -171,6 +172,52 @@ function parseWorkbook(file: File): Promise<XLSX.WorkBook> {
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
+}
+
+/**
+ * Parchea archivos ZIP que usan compresión DEFLATE64 (method 9) a DEFLATE (method 8).
+ * La librería xlsx solo soporta method 0 (STORE) y 8 (DEFLATE).
+ * Escanea byte a byte los headers ZIP y parchea el método de compresión.
+ */
+function repairXlsx(bytes: Uint8Array): Uint8Array {
+  const MAGIC_PK03 = 0x50; const MAGIC_PK04 = 0x4b;
+  // 1. Buscar inicio del ZIP (PK\x03\x04)
+  let start = 0;
+  for (let i = 0; i < Math.min(bytes.length - 4, 65536); i++) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x03 && bytes[i + 3] === 0x04) {
+      start = i; break;
+    }
+  }
+  const buf = start === 0 ? new Uint8Array(bytes) : new Uint8Array(bytes.slice(start));
+
+  // 2. Parchear local file headers (PK\x03\x04)
+  for (let i = 0; i < buf.length - 30; i++) {
+    if (buf[i] === 0x50 && buf[i + 1] === 0x4b && buf[i + 2] === 0x03 && buf[i + 3] === 0x04) {
+      const method = buf[i + 8] | (buf[i + 9] << 8);
+      if (method !== 0 && method !== 8) {
+        buf[i + 8] = 8; buf[i + 9] = 0;
+      }
+      const fnLen = buf[i + 26] | (buf[i + 27] << 8);
+      const exLen = buf[i + 28] | (buf[i + 29] << 8);
+      i += 30 + fnLen + exLen - 1;
+    }
+  }
+
+  // 3. Parchear Central Directory entries (PK\x01\x02)
+  for (let i = 0; i < buf.length - 46; i++) {
+    if (buf[i] === 0x50 && buf[i + 1] === 0x4b && buf[i + 2] === 0x01 && buf[i + 3] === 0x02) {
+      const method = buf[i + 10] | (buf[i + 11] << 8);
+      if (method !== 0 && method !== 8) {
+        buf[i + 10] = 8; buf[i + 11] = 0;
+      }
+      const fnLen = buf[i + 28] | (buf[i + 29] << 8);
+      const exLen = buf[i + 30] | (buf[i + 31] << 8);
+      const cmLen = buf[i + 32] | (buf[i + 33] << 8);
+      i += 46 + fnLen + exLen + cmLen - 1;
+    }
+  }
+
+  return buf;
 }
 
 /**
