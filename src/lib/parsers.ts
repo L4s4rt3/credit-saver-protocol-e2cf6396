@@ -160,29 +160,25 @@ export type ParsedInforme =
 
 function parseWorkbook(file: File): Promise<XLSX.WorkBook> {
   return new Promise((resolve, reject) => {
-    // Leer como ArrayBuffer para intento local
-    const arrReader = new FileReader();
-    arrReader.onload = async (e) => {
-      const raw = new Uint8Array(e.target!.result as ArrayBuffer);
-      let mejorWb: XLSX.WorkBook | null = null;
-      // 1. Intentar local con reparacion ZIP
-      try {
-        const repaired = repairXlsx(new Uint8Array(raw));
-        const wb = XLSX.read(repaired, { type: "array" });
-        if (contarFilas(wb) > 0) mejorWb = wb;
-      } catch (_) { /* ignorar */ }
-      // 2. Intentar edge function — leer como DataURL para base64 fiable
+    // 1. Intentar edge function PRIMERO (lee con DataURL para base64 fiable)
+    (async () => {
       try {
         const dataUrl = await readFileAsDataURL(file);
         const b64 = dataUrl.split(",")[1];
         const wb = await parseWorkbookRemoto(b64, file.name);
-        if (contarFilas(wb) > 0) mejorWb = wb;
-      } catch (_) { /* ignorar */ }
-      if (mejorWb) { resolve(mejorWb); return; }
+        if (contarFilas(wb) > 0) { resolve(wb); return; }
+      } catch (_) { /* fallback a local */ }
+
+      // 2. Fallback a local con reparacion ZIP
+      try {
+        const raw = await readFileAsArrayBuffer(file);
+        const repaired = repairXlsx(new Uint8Array(raw));
+        const wb = XLSX.read(repaired, { type: "array" });
+        if (contarFilas(wb) > 0) { resolve(wb); return; }
+      } catch (_) { /* fallback a error */ }
+
       reject(new Error("No se pudo leer el archivo Excel"));
-    };
-    arrReader.onerror = () => reject(new Error("Error al leer el archivo"));
-    arrReader.readAsArrayBuffer(file);
+    })();
   });
 }
 
@@ -192,6 +188,15 @@ function readFileAsDataURL(file: File): Promise<string> {
     r.onload = () => resolve(r.result as string);
     r.onerror = reject;
     r.readAsDataURL(file);
+  });
+}
+
+function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as ArrayBuffer);
+    r.onerror = reject;
+    r.readAsArrayBuffer(file);
   });
 }
 
