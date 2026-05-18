@@ -631,6 +631,7 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
   let podrido = 0;
   let inMuj = false;
   let pesoCol = -1;
+  let lastPesoCol = -1;
   let vals: number[] = [];
   let foundMujeres = false;
   let foundPodrido = false;
@@ -641,6 +642,7 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       const sumRest = vals.slice(0, -1).reduce((a, b) => a + b, 0);
       mujeres = Math.abs(last - sumRest) < 1 ? last : vals.reduce((a, b) => a + b, 0);
     }
+    lastPesoCol = pesoCol;
     vals = [];
     pesoCol = -1;
     inMuj = false;
@@ -649,6 +651,16 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] ?? [];
     const rv = r.map((c: any) => norm(c));
+
+    if (rv.some((v: string) => v === "podrido")) {
+      foundPodrido = true;
+      const col = pesoCol >= 0 ? pesoCol : lastPesoCol;
+      if (col >= 0) {
+        const kg = toNum(r[col]);
+        if (kg > 0) podrido = kg;
+      }
+      continue;
+    }
 
     if (rv.some((v: string) => v === "mujeres")) {
       if (inMuj) flush();
@@ -665,11 +677,6 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       continue;
     }
     if (inMuj && pesoCol >= 0) { const v = toNum(r[pesoCol]); if (v > 0) vals.push(v); }
-    if (rv.some((v: string) => v === "podrido") && pesoCol >= 0) {
-      foundPodrido = true;
-      const kg = toNum(r[pesoCol]);
-      if (kg > 0) podrido = kg;
-    }
   }
   if (inMuj) flush();
   
