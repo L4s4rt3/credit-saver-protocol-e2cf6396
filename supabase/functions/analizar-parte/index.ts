@@ -631,7 +631,6 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
   let podrido = 0;
   let inMuj = false;
   let pesoCol = -1;
-  let lastPesoCol = -1;
   let vals: number[] = [];
   let foundMujeres = false;
   let foundPodrido = false;
@@ -642,11 +641,21 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
       const sumRest = vals.slice(0, -1).reduce((a, b) => a + b, 0);
       mujeres = Math.abs(last - sumRest) < 1 ? last : vals.reduce((a, b) => a + b, 0);
     }
-    lastPesoCol = pesoCol;
     vals = [];
     pesoCol = -1;
     inMuj = false;
   };
+
+  // Buscar columna "Peso(kg)" globalmente para tablas planas sin sección Mujeres
+  let pesoColGlobal = -1;
+  for (let i = 0; i < Math.min(rows.length, 100); i++) {
+    const r = rows[i] ?? [];
+    for (let j = 0; j < r.length; j++) {
+      const c = norm(r[j]);
+      if (c === "peso (kg)" || c === "peso(kg)" || c === "peso kg") { pesoColGlobal = j; break; }
+    }
+    if (pesoColGlobal >= 0) break;
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] ?? [];
@@ -654,11 +663,8 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
 
     if (rv.some((v: string) => v === "podrido")) {
       foundPodrido = true;
-      const col = pesoCol >= 0 ? pesoCol : lastPesoCol;
-      if (col >= 0) {
-        const kg = toNum(r[col]);
-        if (kg > 0) podrido = kg;
-      }
+      const col = pesoCol >= 0 ? pesoCol : pesoColGlobal;
+      if (col >= 0) { const kg = toNum(r[col]); if (kg > 0) podrido = kg; }
       continue;
     }
 
@@ -680,7 +686,7 @@ function extractTamanos(rows: any[][]): { mujeres: number; podrido: number } {
   }
   if (inMuj) flush();
   
-  console.log("[TAMANOS] encontroMujeres=" + foundMujeres + " inMuj=" + inMuj + " pesoCol=" + pesoCol + " encontroPodrido=" + foundPodrido + " -> mujeres=" + mujeres + " podrido=" + podrido);
+  console.log("[TAMANOS] pesoColGlobal=" + pesoColGlobal + " encontroMujeres=" + foundMujeres + " encontroPodrido=" + foundPodrido + " -> mujeres=" + mujeres + " podrido=" + podrido);
   return { mujeres, podrido };
 }
 
